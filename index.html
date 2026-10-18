@@ -1,0 +1,398 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;height:100%}body{font-size:14px}[hidden]{display:none!important}</style></head><body>
+<title>Piano con Marina</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one-screen lesson — teacher on top, falling-note lane in the middle, six coloured keys at the bottom (lanes line up with keys) */
+:root{
+  --sea-top:#15607c; --sea-deep:#0a2a40; --foam:#eaf8f6; --muted:#a7d3d8; --sand:#ffe6a6; --coral:#ff7d6e; --ink:#0a2232;
+  --do:#f0524f; --re:#ff9a3c; --mi:#ffd23f; --fa:#4cc96b; --sol:#3fa3ff; --la:#a56bf0;
+  --display:'Fredoka','Trebuchet MS',system-ui,sans-serif; --body:'Nunito',system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg,var(--sea-top) 0%,var(--sea-deep) 75%);color:var(--foam);font-family:var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent}
+.app{position:relative;height:100%;max-width:720px;margin:0 auto;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top{display:flex;align-items:center;gap:10px}
+.top h1{font-family:var(--display);font-weight:700;font-size:1.25rem;margin:0;flex:1;min-width:0;line-height:1.1;text-wrap:balance}
+.top h1 small{display:block;font-family:var(--body);font-weight:600;font-size:.72rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.tbtn{font:800 .8rem var(--body);color:var(--foam);background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);border-radius:999px;padding:8px 12px;cursor:pointer}
+.tbtn:focus-visible,.btn:focus-visible,.key:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
+.tbtn[aria-pressed="false"]{opacity:.55}
+.progress{height:6px;border-radius:6px;background:rgba(255,255,255,.12);overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--sand);transition:width .4s}
+.teacher{display:flex;align-items:center;gap:10px;min-height:96px}
+.teacher svg.marina{width:86px;height:100px;flex:none;animation:bob 3s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-5px) rotate(-2deg)}}
+.marina .mouth{transform-origin:60px 58px;transition:transform .1s}
+.talking .marina .mouth{animation:talk .28s infinite alternate}
+@keyframes talk{to{transform:scaleY(2.2)}}
+.bubble{position:relative;flex:1;min-width:0;background:var(--foam);color:var(--ink);border-radius:20px;padding:12px 16px;font-family:var(--display);font-weight:600;font-size:clamp(1rem,3.6vw,1.3rem);line-height:1.25;min-height:2.6em;display:flex;align-items:center}
+.bubble::before{content:"";position:absolute;left:-10px;top:50%;margin-top:-10px;border:10px solid transparent;border-left:0;border-right-color:var(--foam)}
+.lane{position:relative;flex:1;min-height:150px;border-radius:18px;overflow:hidden;background:rgba(3,20,32,.35);border:1.5px solid rgba(255,255,255,.08)}
+.lane canvas{position:absolute;inset:0;width:100%;height:100%}
+.lyrics{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;min-height:2.4em;font-family:var(--display);font-weight:600;font-size:clamp(1rem,4vw,1.35rem)}
+.lyrics span{padding:2px 8px;border-radius:10px;color:var(--muted);transition:background .15s,color .15s,transform .15s}
+.lyrics span.on{background:var(--sand);color:var(--ink);transform:scale(1.12)}
+.lyrics span.done{color:var(--foam)}
+.keys{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:4px;height:clamp(120px,24vh,180px)}
+.key{position:relative;border:0;border-radius:0 0 14px 14px;background:#fbfdfd;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:0 0 10px;font:700 clamp(.85rem,3.4vw,1.1rem) var(--display);color:var(--ink);box-shadow:inset 0 -10px 0 var(--c),0 4px 0 rgba(0,0,0,.25);touch-action:manipulation;transition:transform .08s}
+.key .lbl{margin-bottom:10px}
+.key.down{transform:translateY(3px);background:color-mix(in srgb,var(--c) 35%,#fff)}
+.key.glow{background:color-mix(in srgb,var(--c) 55%,#fff);animation:pulse .7s ease-in-out infinite alternate}
+@keyframes pulse{to{box-shadow:inset 0 -10px 0 var(--c),0 0 0 5px var(--c),0 0 26px var(--c)}}
+.key .fing{position:absolute;top:10px;width:1.7em;height:1.7em;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--foam);font-size:.8em;opacity:0;transition:opacity .3s}
+.show-fingers .key .fing{opacity:1}
+.bkey{position:absolute;top:0;width:calc((100% - 20px)/6*.58);height:58%;background:#13202a;border:0;border-radius:0 0 8px 8px;transform:translateX(-50%);cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.bkey.down{background:#2c3c48}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(6,26,40,.72);backdrop-filter:blur(3px);z-index:5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.card{background:var(--foam);color:var(--ink);border-radius:26px;padding:24px 22px;max-width:380px;width:100%;box-sizing:border-box;text-align:center;display:flex;flex-direction:column;gap:12px}
+.card h2{font-family:var(--display);font-weight:700;font-size:1.7rem;margin:0;text-wrap:balance}
+.card p{margin:0;font-weight:600;color:#33525f}
+.btn{font:700 1.15rem var(--display);border:0;border-radius:18px;padding:14px 18px;cursor:pointer;background:var(--coral);color:#fff;box-shadow:0 5px 0 #c4554a}
+.btn.alt{background:var(--sol);box-shadow:0 5px 0 #2b74b8}
+.btn.mic{background:var(--fa);box-shadow:0 5px 0 #2f8d48}
+.hint{font-size:.85rem}
+.heard{font:700 .85rem var(--display);background:rgba(255,255,255,.14);border-radius:999px;padding:6px 10px;white-space:nowrap}
+.heard b{display:inline-block;min-width:2.2em;text-align:center}
+.heard.ok b{color:var(--fa)}
+@media (max-width:420px){.top h1 small{display:none}.tbtn{padding:7px 9px}}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(0,0,0,.2)}
+.stars{font-size:2.6rem;letter-spacing:.1em;color:#f4b400}
+.stars .off{color:#cfdcdf}
+@media (prefers-reduced-motion:reduce){.teacher svg.marina,.key.glow,.talking .marina .mouth{animation:none}}
+</style>
+
+<div class="app" id="app">
+  <div class="top">
+    <h1><small>Lección de piano · Nivel 1</small>Los pollitos dicen</h1>
+    <span class="heard" id="heard" hidden>🎤 <b id="heardNote">…</b></span>
+    <button class="tbtn" id="micBtn" aria-pressed="false">🎤 Piano</button>
+    <button class="tbtn" id="voiceBtn" aria-pressed="true">🔊 Voz</button>
+    <button class="tbtn" id="restartBtn">Inicio</button>
+  </div>
+  <div class="progress"><i id="prog"></i></div>
+
+  <div class="teacher" id="teacher">
+    <svg class="marina" viewBox="0 0 120 140" aria-label="Marina, la sirena profesora">
+      <path d="M30 50 C22 20 50 8 66 14 C92 18 100 44 94 70 C90 86 98 96 86 100 C70 104 40 104 30 96 C22 88 34 74 30 50Z" fill="#7a5cf0"/>
+      <path d="M48 76 C46 96 52 112 66 122 C72 126 76 124 74 118 C64 104 70 90 72 76Z" fill="#26c9a8"/>
+      <path d="M58 92 q4 3 8 0 M56 102 q4 3 8 0 M62 112 q3 2 6 0" stroke="#169a80" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M70 118 C82 112 96 116 102 126 C92 126 84 130 78 136 C76 128 72 124 70 118Z" fill="#26c9a8"/>
+      <path d="M70 118 C62 124 54 134 44 134 C50 126 52 120 58 116Z" fill="#1fb495"/>
+      <rect x="47" y="64" width="26" height="16" rx="8" fill="#ffd2b0"/>
+      <circle cx="52" cy="70" r="5.5" fill="#ff8fb1"/><circle cx="68" cy="70" r="5.5" fill="#ff8fb1"/>
+      <circle cx="60" cy="46" r="21" fill="#ffd9bd"/>
+      <path d="M38 44 C38 22 62 18 78 30 C70 30 64 34 60 38 C56 32 46 34 38 44Z" fill="#8a6dff"/>
+      <circle cx="52" cy="47" r="3" fill="#0a2232"/><circle cx="68" cy="47" r="3" fill="#0a2232"/>
+      <circle cx="53" cy="46" r="1" fill="#fff"/><circle cx="69" cy="46" r="1" fill="#fff"/>
+      <circle cx="46" cy="54" r="3.5" fill="#ff9fb4" opacity=".7"/><circle cx="74" cy="54" r="3.5" fill="#ff9fb4" opacity=".7"/>
+      <path class="mouth" d="M55 57 Q60 61 65 57 Q60 59 55 57Z" fill="#c2414f" stroke="#c2414f" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M80 22 l3 6 6 1 -5 4 2 6 -6 -3 -5 3 1 -6 -4 -4 6 -1Z" fill="#ffb84d"/>
+    </svg>
+    <div class="bubble" id="bubble">¡Hola! Soy Marina. ¿Aprendemos una canción?</div>
+  </div>
+
+  <div class="lane" id="lane"><canvas id="cv"></canvas></div>
+  <div class="lyrics" id="lyrics" aria-live="polite"></div>
+  <div class="keys" id="keys"></div>
+
+  <div class="overlay" id="startOv">
+    <div class="card">
+      <h2>Los pollitos dicen</h2>
+      <p>Una lección de piano con Marina. Sube el volumen y mira las notas de colores.</p>
+      <button class="btn" id="watchBtn">▶ Ver la lección</button>
+      <button class="btn alt" id="practiceBtn">👆 Tocar en la pantalla</button>
+      <button class="btn mic" id="realBtn">🎤 Tocar con mi piano</button>
+      <p class="hint" id="micHint">Con tu piano, Marina escucha cada nota por el micrófono y avanza cuando suena la correcta.</p>
+    </div>
+  </div>
+  <div class="overlay" id="endOv" hidden>
+    <div class="card">
+      <h2 id="endTitle">¡Lo lograste!</h2>
+      <div class="stars" id="stars"></div>
+      <p id="endText">Tocaste toda la canción.</p>
+      <button class="btn" id="againBtn">🎹 Tocar otra vez</button>
+      <button class="btn alt" id="verse2Btn">🐔 Tocar la parte de la gallina</button>
+      <button class="btn alt" id="rewatchBtn">▶ Ver la lección</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+const NOTES=[
+  {n:'Do',f:261.63,c:'#f0524f',col:'roja',fing:'1'},
+  {n:'Re',f:293.66,c:'#ff9a3c',col:'naranja',fing:'2'},
+  {n:'Mi',f:329.63,c:'#ffd23f',col:'amarilla',fing:'3'},
+  {n:'Fa',f:349.23,c:'#4cc96b',col:'verde',fing:'4'},
+  {n:'Sol',f:392.00,c:'#3fa3ff',col:'azul',fing:'5'},
+  {n:'La',f:440.00,c:'#a56bf0',col:'morada',fing:'5↗'}
+];
+const BLACK=[{pos:1,f:277.18},{pos:2,f:311.13},{pos:4,f:369.99},{pos:5,f:415.30}];
+const MEL=[0,1,2,3,4,4, 5,5,5,5,4,4, 3,3,3,3,2,2, 1,1,1,1,0,0];
+const DUR=[1,1,1,1,1,2];
+const V1=['Los','po','lli','tos','di','cen','pí','o','pí','o','pí','o','cuan','do','tie','nen','ham','bre','cuan','do','tie','nen','frí','o'];
+const V2=['La','ga','lli','na','bus','ca','el','ma','íz','y el','tri','go','les','da','la','co','mi','da','y','les','pres','ta a','bri','go'];
+const PHRASE_TXT=['“Los pollitos dicen” sube como una escalera: Do, Re, Mi, Fa, Sol, Sol.','“Pío, pío, pío”: cuatro veces La, la morada, y bajamos a Sol.','“Cuando tienen hambre”: cuatro veces Fa, la verde, y después Mi.','“Cuando tienen frío”: cuatro veces Re, y terminamos en Do, la roja.'];
+
+const $=id=>document.getElementById(id);
+const bubble=$('bubble'),teacher=$('teacher'),keysEl=$('keys'),lyricsEl=$('lyrics'),cv=$('cv'),ctx=cv.getContext('2d'),lane=$('lane'),prog=$('prog');
+
+/* ---------- audio ---------- */
+let ac=null;
+function audio(){ if(!ac){ try{ac=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} } if(ac&&ac.state==='suspended')ac.resume(); return ac; }
+function tone(f,len){
+  const a=audio(); if(!a) return; const t=a.currentTime; len=len||1.4;
+  const g=a.createGain(); const lp=a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2600;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.35,t+0.012); g.gain.exponentialRampToValueAtTime(0.0008,t+len);
+  [['triangle',1,1],['sine',2,0.25],['sine',3,0.08]].forEach(([type,m,v])=>{const o=a.createOscillator(),og=a.createGain();o.type=type;o.frequency.value=f*m;og.gain.value=v;o.connect(og).connect(lp);o.start(t);o.stop(t+len+0.05);});
+  lp.connect(g).connect(a.destination);
+}
+
+/* ---------- voice ---------- */
+let voiceOn=true, voice=null;
+function pickVoice(){ try{ const vs=speechSynthesis.getVoices(); voice=vs.find(v=>/^es[-_](CL|419|MX|US|AR)/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null; }catch(e){} }
+try{ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }catch(e){}
+$('voiceBtn').onclick=e=>{voiceOn=!voiceOn;e.currentTarget.setAttribute('aria-pressed',voiceOn);if(!voiceOn)try{speechSynthesis.cancel()}catch(_){}};
+
+/* ---------- microphone pitch detection ---------- */
+const PC2KEY={0:0,2:1,4:2,5:3,7:4,9:5};
+const PCNAME=['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
+const mic={on:false,an:null,buf:null,stream:null,armed:true,minSince:0,lastAcc:0,cand:-1,candN:0,silent:0};
+const heardEl=$('heard'),heardNote=$('heardNote'); let tapAt=0;
+function autoCorr(buf,sr){
+  const n=buf.length; let rms=0; for(let i=0;i<n;i++)rms+=buf[i]*buf[i]; rms=Math.sqrt(rms/n);
+  if(rms<0.012) return {f:-1,rms};
+  // trim to the strongest part
+  let a=0,b=n-1; const th=0.2;
+  for(let i=0;i<n/2;i++){if(Math.abs(buf[i])<th){a=i;break;}}
+  for(let i=1;i<n/2;i++){if(Math.abs(buf[n-i])<th){b=n-i;break;}}
+  const x=buf.slice(a,b), m=x.length; if(m<400) return {f:-1,rms};
+  const minLag=Math.floor(sr/1100), maxLag=Math.min(m-1,Math.floor(sr/90));
+  const c=new Float32Array(maxLag+2);
+  for(let lag=minLag;lag<=maxLag+1;lag++){let s=0;for(let i=0;i<m-lag;i++)s+=x[i]*x[i+lag];c[lag]=s;}
+  let d=minLag; while(d<maxLag&&c[d]>c[d+1])d++;
+  let best=-1,bv=-Infinity; for(let i=d;i<=maxLag;i++){if(c[i]>bv){bv=c[i];best=i;}}
+  if(best<=0) return {f:-1,rms};
+  const y1=c[best-1]||0,y2=c[best],y3=c[best+1]||0, p=(y1-y3)/(2*(y1-2*y2+y3)||1);
+  return {f:sr/(best+(isFinite(p)?p:0)),rms};
+}
+async function startMic(){
+  const a=audio();
+  if(!a||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error('nomic');
+  const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  const src=a.createMediaStreamSource(s); const an=a.createAnalyser(); an.fftSize=2048; src.connect(an);
+  Object.assign(mic,{on:true,an,stream:s,buf:new Float32Array(an.fftSize),armed:true,cand:-1,candN:0});
+  heardEl.hidden=false; $('micBtn').setAttribute('aria-pressed','true');
+  micLoop();
+}
+function stopMic(){
+  if(mic.stream)mic.stream.getTracks().forEach(t=>t.stop());
+  mic.on=false;mic.an=null;mic.stream=null;heardEl.hidden=true;$('micBtn').setAttribute('aria-pressed','false');
+}
+function micLoop(){
+  if(!mic.on) return;
+  mic.an.getFloatTimeDomainData(mic.buf);
+  const {f,rms}=autoCorr(mic.buf,ac.sampleRate), now=performance.now();
+  // re-arm on a new strike: the level jumps up again after decaying (needed for repeated notes)
+  if(!mic.armed){ mic.minSince=Math.min(mic.minSince,rms); if(now-mic.lastAcc>140&&rms>0.02&&rms>mic.minSince*1.6){mic.armed=true;mic.cand=-1;mic.candN=0;} if(rms<0.012)mic.silent++; else mic.silent=0; if(mic.silent>4){mic.armed=true;} }
+  if(f>0){
+    const midi=Math.round(69+12*Math.log2(f/440)), pc=((midi%12)+12)%12;
+    heardNote.textContent=PCNAME[pc];
+    if(pc===mic.cand)mic.candN++; else {mic.cand=pc;mic.candN=1;}
+    if(mic.armed&&mic.candN>=2){
+      mic.armed=false; mic.lastAcc=now; mic.minSince=rms; mic.silent=0;
+      const k=PC2KEY[pc]; heardEl.classList.toggle('ok',k!==undefined);
+      if(k!==undefined) press(k,true); else heardBlack(PCNAME[pc]);
+    }
+  }else if(rms<0.012){heardNote.textContent='…';}
+  requestAnimationFrame(micLoop);
+}
+function heardBlack(name){ if(eng.mode==='practice'){eng.misses++;bubble.textContent='Escuché '+name+', una tecla negra. Busca la blanca '+NOTES[eng.seq[eng.idx].k].col+'.';} }
+$('micBtn').onclick=async()=>{ if(mic.on){stopMic();return;} try{await startMic();bubble.textContent='¡Te escucho! Toca una tecla de tu piano.';}catch(e){micFail();} };
+function micFail(){bubble.textContent='No puedo usar el micrófono aquí. Abre el archivo de la lección en Chrome y permite el micrófono. Mientras, puedes tocar en la pantalla.';}
+
+/* ---------- keyboard ---------- */
+const keyEls=NOTES.map((nt,i)=>{
+  const b=document.createElement('button'); b.className='key'; b.id='key'+i; b.style.setProperty('--c',nt.c);
+  b.innerHTML='<span class="fing">'+nt.fing+'</span><span class="lbl">'+nt.n+'</span>'; b.setAttribute('aria-label','Tecla '+nt.n);
+  b.addEventListener('pointerdown',e=>{e.preventDefault();press(i);}); keysEl.appendChild(b); return b;
+});
+BLACK.forEach(bk=>{const b=document.createElement('button');b.className='bkey';b.tabIndex=-1;b.setAttribute('aria-hidden','true');
+  b.style.left='calc('+bk.pos+' * (100% + 4px) / 6 - 2px)';
+  b.addEventListener('pointerdown',e=>{e.preventDefault();tone(bk.f);b.classList.add('down');setTimeout(()=>b.classList.remove('down'),160);}); keysEl.appendChild(b);});
+const KMAP={a:0,s:1,d:2,f:3,g:4,h:5};
+addEventListener('keydown',e=>{if(e.repeat)return;const k=KMAP[e.key.toLowerCase()];if(k!==undefined)press(k);});
+function flash(i){const k=keyEls[i];k.classList.add('down');setTimeout(()=>k.classList.remove('down'),180);}
+function glow(i){keyEls.forEach((k,j)=>k.classList.toggle('glow',j===i));}
+
+/* ---------- lane / engine ---------- */
+let W=0,H=0,dpr=1;
+function resize(){dpr=Math.min(2,window.devicePixelRatio||1);W=lane.clientWidth;H=lane.clientHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
+new ResizeObserver(resize).observe(lane); resize();
+const FALL=2.4; // seconds a note is visible before reaching the line
+const eng={mode:'idle',seq:[],clock:0,idx:0,waiting:false,misses:0,done:null,lyr:null};
+const bubbles=Array.from({length:14},()=>({x:Math.random(),y:Math.random(),r:2+Math.random()*4,s:.02+Math.random()*.05}));
+function buildSeq(idxs,lyr,beat,lead){let t=lead,out=[];idxs.forEach((k,i)=>{const d=DUR[i%6]*beat;out.push({t,d,k,syl:lyr?lyr[i]:NOTES[k].n,played:false,hit:false});t+=d;if(i%6===5)t+=beat*.5;});return out;}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  const hitY=H-14, speed=hitY/FALL, lw=(W-20)/6;
+  if(eng.mode==='demo'){
+    eng.clock+=dt;
+    eng.seq.forEach((n,i)=>{if(!n.played&&eng.clock>=n.t){n.played=true;tone(NOTES[n.k].f,Math.max(.9,n.d+.3));flash(n.k);setLyric(i);}});
+    const end=eng.seq[eng.seq.length-1]; if(eng.done&&eng.clock>end.t+end.d+.4){const d=eng.done;eng.done=null;eng.mode='idle';d();}
+  }else if(eng.mode==='practice'){
+    const nx=eng.seq[eng.idx];
+    if(nx){ if(!eng.waiting){eng.clock+=dt; if(eng.clock>=nx.t){eng.clock=nx.t;eng.waiting=true;}}
+      glow(nx.t-eng.clock<.7?nx.k:-1);}
+  }
+  ctx.clearRect(0,0,W,H);
+  // ambient bubbles
+  ctx.fillStyle='rgba(234,248,246,.12)';
+  bubbles.forEach(b=>{b.y-=b.s*dt;if(b.y<-.05){b.y=1.05;b.x=Math.random();}ctx.beginPath();ctx.arc(b.x*W,b.y*H,b.r,0,7);ctx.fill();});
+  // lane guides
+  for(let i=0;i<6;i++){ctx.fillStyle=i%2?'rgba(255,255,255,.025)':'rgba(255,255,255,.05)';ctx.fillRect(i*(lw+4),0,lw,hitY);}
+  // notes
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,hitY+2);ctx.clip();
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  eng.seq.forEach(n=>{
+    if(n.hit) return;
+    const yb=hitY-(n.t-eng.clock)*speed, h=Math.max(26,n.d*speed-6), x=n.k*(lw+4)+3, w=lw-6;
+    if(yb-h>hitY||yb<-10) return;
+    const nt=NOTES[n.k]; ctx.globalAlpha=n.played?.45:1;
+    ctx.fillStyle=nt.c; rr(x,yb-h,w,h,12); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.35)'; rr(x+5,yb-h+4,w-10,6,3); ctx.fill();
+    ctx.fillStyle=n.k===2?'#0a2232':'#fff'; ctx.font='700 '+Math.min(18,lw*.3)+'px Fredoka, sans-serif';
+    ctx.fillText(nt.n,x+w/2,yb-Math.min(h/2,18));
+    ctx.globalAlpha=1;
+  });
+  ctx.restore();
+  // hit line
+  ctx.fillStyle='rgba(255,230,166,.9)';ctx.fillRect(0,hitY,W,4);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function press(i,fromMic){
+  if(fromMic){ if(performance.now()-tapAt<700) return; }
+  else { tapAt=performance.now(); tone(NOTES[i].f); }
+  flash(i);
+  if(keyWaiter&&keyWaiter.k===i){const r=keyWaiter.res;keyWaiter=null;r();}
+  if(eng.mode!=='practice') return;
+  const nx=eng.seq[eng.idx]; if(!nx) return;
+  if(i===nx.k && nx.t-eng.clock<.9){
+    nx.hit=true; eng.clock=nx.t; eng.waiting=false; setLyric(eng.idx); eng.idx++;
+    if(eng.idx%6===0) bubble.textContent=['¡Muy bien!','¡Bacán!','¡Así se hace!','¡Eres genial!'][(eng.idx/6-1)%4];
+    if(eng.idx>=eng.seq.length){glow(-1);setTimeout(finishPractice,700);}
+  }else if(nx.t-eng.clock<.9){eng.misses++;bubble.textContent='¡Casi! Busca la tecla '+NOTES[nx.k].col+' que brilla.';}
+}
+
+/* ---------- lyrics ---------- */
+function showPhrase(seq,start){
+  eng.lyr={seq,start};
+  lyricsEl.innerHTML=seq.slice(start,start+6).map(n=>'<span>'+n.syl+'</span>').join('');
+}
+function setLyric(i){
+  const L=eng.lyr; if(!L) return;
+  if(i<L.start||i>=L.start+6) showPhrase(L.seq,Math.floor(i/6)*6);
+  [...lyricsEl.children].forEach((s,j)=>{const g=eng.lyr.start+j;s.className=g===i?'on':g<i?'done':'';});
+}
+
+/* ---------- timeline helpers ---------- */
+let token=0;
+function check(t){if(t!==token)throw 'cancel';}
+const wait=(ms,t)=>new Promise(r=>setTimeout(r,ms)).then(()=>check(t));
+function say(text,t){
+  bubble.textContent=text; teacher.classList.add('talking');
+  const est=900+text.length*62;
+  return new Promise(res=>{
+    let doneFlag=false; const fin=()=>{if(doneFlag)return;doneFlag=true;teacher.classList.remove('talking');res();};
+    if(voiceOn&&'speechSynthesis' in window){
+      try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.replace(/[“”]/g,''));u.lang=voice?voice.lang:'es-ES';if(voice)u.voice=voice;u.rate=.95;u.pitch=1.25;u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);setTimeout(fin,est+3500);}catch(e){setTimeout(fin,est);}
+    }else setTimeout(fin,est);
+  }).then(()=>wait(250,t));
+}
+function playDemo(seq,t){
+  return new Promise((res,rej)=>{eng.seq=seq;eng.clock=0;eng.mode='demo';eng.done=res;}).then(()=>check(t));
+}
+let keyWaiter=null;
+function waitForKey(k,t){return new Promise(res=>{keyWaiter={k,res};setTimeout(()=>{if(keyWaiter&&keyWaiter.res===res){keyWaiter=null;res();}},15000);}).then(()=>check(t));}
+const SCENES=7;
+function setProg(i){prog.style.width=(i/SCENES*100)+'%';}
+
+async function lesson(){
+  const t=++token; resetEngine();
+  try{
+    setProg(0);
+    await say('¡Hola! Soy Marina, la sirena pianista.',t);
+    await say('Hoy vamos a tocar juntas “Los pollitos dicen”.',t);
+    setProg(1);
+    await say('Mira el piano. Cada tecla tiene su color.',t);
+    for(let i=0;i<6;i++){glow(i);tone(NOTES[i].f);await say('Esta es '+NOTES[i].n+', la '+NOTES[i].col+'.',t);}
+    glow(-1); setProg(2);
+    keysEl.classList.add('show-fingers');
+    await say('Pon tu mano derecha así: el dedo gordo en Do, la roja.',t);
+    await say('Cada dedito en una tecla. El meñique queda en Sol.',t);
+    await say('Para La, la morada, estira el meñique un poquito.',t);
+    keysEl.classList.remove('show-fingers');
+    if(mic.on){
+      await say('En tu piano, busca dos teclas negras juntitas.',t);
+      glow(0); await say('Do es la tecla blanca justo a la izquierda de esas dos negras. ¡Tócala!',t);
+      await waitForKey(0,t); glow(-1);
+      await say('¡Sí! Esa es Do. Ahora mira y escucha cómo va la canción.',t);
+    }
+    for(let p=0;p<4;p++){
+      setProg(3+p*.75);
+      await say(PHRASE_TXT[p],t);
+      const seq=buildSeq(MEL.slice(p*6,p*6+6),V1.slice(p*6,p*6+6),.75,FALL);
+      showPhrase(seq,0); await playDemo(seq,t); await wait(300,t);
+    }
+    setProg(6);
+    await say('¡Ahora toda la canción! Canta conmigo mientras bajan las notas.',t);
+    const full=buildSeq(MEL,V1,.62,FALL); showPhrase(full,0); await playDemo(full,t);
+    await say('¡Precioso! Ahora te toca a ti. Toca la tecla que brilla, yo te espero.',t);
+    setProg(7);
+    practice(V1,t);
+  }catch(e){if(e!=='cancel')console.error(e);}
+}
+function resetEngine(){eng.mode='idle';eng.seq=[];eng.done=null;eng.idx=0;eng.misses=0;eng.waiting=false;glow(-1);lyricsEl.innerHTML='';keysEl.classList.remove('show-fingers');try{speechSynthesis.cancel()}catch(e){}teacher.classList.remove('talking');}
+let lastVerse=V1;
+function practice(verse){
+  const t=++token; resetEngine(); lastVerse=verse; setProg(7);
+  bubble.textContent=mic.on?'Tu turno: toca en tu piano la nota del color que brilla. Yo te escucho.':'Tu turno: toca la tecla que brilla. ¡Sin apuro!';
+  const seq=buildSeq(MEL,verse,.62,FALL); showPhrase(seq,0);
+  eng.seq=seq; eng.clock=0; eng.mode='practice';
+}
+function finishPractice(){
+  eng.mode='idle'; const m=eng.misses, s=m<=3?3:m<=8?2:1;
+  $('stars').innerHTML=[0,1,2].map(i=>'<span class="'+(i<s?'':'off')+'">★</span>').join('');
+  $('endTitle').textContent=s===3?'¡Lo lograste!':'¡Muy bien!';
+  $('endText').textContent=s===3?'Tocaste toda la canción. ¡Pío, pío, pío!':'Tocaste toda la canción. Otra vez y te sale perfecta.';
+  $('verse2Btn').hidden=lastVerse===V2;
+  $('endOv').hidden=false;
+  say(s===3?'¡Lo lograste! Eres una pianista.':'¡Muy bien! Tocaste toda la canción.',token).catch(()=>{});
+}
+
+$('watchBtn').onclick=()=>{audio();$('startOv').hidden=true;lesson();};
+$('practiceBtn').onclick=()=>{audio();$('startOv').hidden=true;practice(V1);};
+$('realBtn').onclick=async()=>{
+  audio();
+  try{ if(!mic.on) await startMic(); $('startOv').hidden=true; lesson(); }
+  catch(e){ $('micHint').textContent='Esta vista no deja usar el micrófono. Abre el archivo de la lección en Chrome (computador o tablet Android) y acepta el permiso del micrófono.'; $('micHint').style.color='#b23a2e'; }
+};
+$('againBtn').onclick=()=>{$('endOv').hidden=true;practice(lastVerse);};
+$('verse2Btn').onclick=()=>{$('endOv').hidden=true;practice(V2);};
+$('rewatchBtn').onclick=()=>{$('endOv').hidden=true;lesson();};
+$('restartBtn').onclick=()=>{++token;resetEngine();setProg(0);$('endOv').hidden=true;$('startOv').hidden=false;bubble.textContent='¡Hola! Soy Marina. ¿Aprendemos una canción?';};
+
+// resting frame: show sample notes and first phrase
+const preview=buildSeq(MEL.slice(0,6),V1.slice(0,6),.75,.6); eng.seq=preview; showPhrase(preview,0);
+})();
+</script>
+
+</body></html>
