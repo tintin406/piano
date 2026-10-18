@@ -63,13 +63,15 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
 .stars{font-size:2.6rem;letter-spacing:.1em;color:#f4b400}
 .stars .off{color:#cfdcdf}
 @media (prefers-reduced-motion:reduce){.teacher svg.marina,.key.glow,.talking .marina .mouth{animation:none}}
+.heard .lvl{display:inline-block;width:34px;height:6px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden;vertical-align:middle;margin-right:4px}
+.heard .lvl i{display:block;height:100%;width:0;background:var(--fa);transition:width .06s}
+.modechip{font:700 .75rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 </style>
 
 <div class="app" id="app">
   <div class="top">
-    <h1><small>Lección de piano · Nivel 1</small>Los pollitos dicen</h1>
-    <span class="heard" id="heard" hidden>🎤 <b id="heardNote">…</b></span>
-    <button class="tbtn" id="micBtn" aria-pressed="false">🎤 Piano</button>
+    <h1><small id="modeLabel">Lección de piano · Nivel 1</small>Los pollitos dicen</h1>
+    <span class="heard" id="heard" hidden><span class="lvl"><i id="lvl"></i></span><b id="heardNote">…</b></span>
     <button class="tbtn" id="voiceBtn" aria-pressed="true">🔊 Voz</button>
     <button class="tbtn" id="restartBtn">Inicio</button>
   </div>
@@ -102,11 +104,10 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
   <div class="overlay" id="startOv">
     <div class="card">
       <h2>Los pollitos dicen</h2>
-      <p>Una lección de piano con Marina. Sube el volumen y mira las notas de colores.</p>
-      <button class="btn" id="watchBtn">▶ Ver la lección</button>
-      <button class="btn alt" id="practiceBtn">👆 Tocar en la pantalla</button>
-      <button class="btn mic" id="realBtn">🎤 Tocar con mi piano</button>
-      <p class="hint" id="micHint">Con tu piano, Marina escucha cada nota por el micrófono y avanza cuando suena la correcta.</p>
+      <p>Una clase de piano con Marina. Es la misma clase con la pantalla o con tu piano.</p>
+      <button class="btn mic" id="pianoBtn">🎹 Clase con mi piano</button>
+      <button class="btn alt" id="screenBtn">👆 Clase con la pantalla</button>
+      <p class="hint" id="micHint">Con tu piano: deja el teléfono cerca, sube el volumen y acepta el permiso del micrófono.</p>
     </div>
   </div>
   <div class="overlay" id="endOv" hidden>
@@ -116,7 +117,7 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
       <p id="endText">Tocaste toda la canción.</p>
       <button class="btn" id="againBtn">🎹 Tocar otra vez</button>
       <button class="btn alt" id="verse2Btn">🐔 Tocar la parte de la gallina</button>
-      <button class="btn alt" id="rewatchBtn">▶ Ver la lección</button>
+      <button class="btn alt" id="rewatchBtn">▶ Repetir la clase</button>
     </div>
   </div>
 </div>
@@ -136,262 +137,371 @@ const MEL=[0,1,2,3,4,4, 5,5,5,5,4,4, 3,3,3,3,2,2, 1,1,1,1,0,0];
 const DUR=[1,1,1,1,1,2];
 const V1=['Los','po','lli','tos','di','cen','pí','o','pí','o','pí','o','cuan','do','tie','nen','ham','bre','cuan','do','tie','nen','frí','o'];
 const V2=['La','ga','lli','na','bus','ca','el','ma','íz','y el','tri','go','les','da','la','co','mi','da','y','les','pres','ta a','bri','go'];
-const PHRASE_TXT=['“Los pollitos dicen” sube como una escalera: Do, Re, Mi, Fa, Sol, Sol.','“Pío, pío, pío”: cuatro veces La, la morada, y bajamos a Sol.','“Cuando tienen hambre”: cuatro veces Fa, la verde, y después Mi.','“Cuando tienen frío”: cuatro veces Re, y terminamos en Do, la roja.'];
+const PHRASE_TXT=[
+  '“Los pollitos dicen” sube como una escalera: Do, Re, Mi, Fa, Sol, Sol.',
+  '“Pío, pío, pío”: cuatro veces La, la morada, y bajamos a Sol.',
+  '“Cuando tienen hambre”: cuatro veces Fa, la verde, y después Mi.',
+  '“Cuando tienen frío”: cuatro veces Re, y terminamos en Do, la roja.'];
+const PRAISE=['¡Muy bien!','¡Bacán!','¡Así se hace!','¡Eres genial!','¡Excelente!'];
+const PC2KEY={0:0,2:1,4:2,5:3,7:4,9:5};
+const PCNAME=['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
 
 const $=id=>document.getElementById(id);
 const bubble=$('bubble'),teacher=$('teacher'),keysEl=$('keys'),lyricsEl=$('lyrics'),cv=$('cv'),ctx=cv.getContext('2d'),lane=$('lane'),prog=$('prog');
 
-/* ---------- audio ---------- */
-let ac=null;
-function audio(){ if(!ac){ try{ac=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} } if(ac&&ac.state==='suspended')ac.resume(); return ac; }
+/* ================= audio ================= */
+let ac=null,master=null;
+function audio(){
+  if(!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)();master=ac.createGain();master.gain.value=1;master.connect(ac.destination);}catch(e){}}
+  if(ac&&ac.state!=='running'){try{ac.resume();}catch(e){}}
+  return ac;
+}
 function tone(f,len){
   const a=audio(); if(!a) return; const t=a.currentTime; len=len||1.4;
-  const g=a.createGain(); const lp=a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2600;
-  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.35,t+0.012); g.gain.exponentialRampToValueAtTime(0.0008,t+len);
+  const g=a.createGain(), lp=a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2600;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.5,t+0.012); g.gain.exponentialRampToValueAtTime(0.0008,t+len);
   [['triangle',1,1],['sine',2,0.25],['sine',3,0.08]].forEach(([type,m,v])=>{const o=a.createOscillator(),og=a.createGain();o.type=type;o.frequency.value=f*m;og.gain.value=v;o.connect(og).connect(lp);o.start(t);o.stop(t+len+0.05);});
-  lp.connect(g).connect(a.destination);
+  lp.connect(g).connect(master);
+  soundUntil=Math.max(soundUntil,performance.now()+Math.min(len,1.2)*1000);
 }
+let soundUntil=0; // while the phone itself is making piano sound, the mic ignores wrong notes
 
-/* ---------- voice ---------- */
-let voiceOn=true, voice=null;
-function pickVoice(){ try{ const vs=speechSynthesis.getVoices(); voice=vs.find(v=>/^es[-_](CL|419|MX|US|AR)/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null; }catch(e){} }
-try{ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }catch(e){}
+/* ================= voice ================= */
+let voiceOn=true,voice=null,speaking=false;
+function pickVoice(){try{const vs=speechSynthesis.getVoices();voice=vs.find(v=>/^es[-_](CL|419|MX|US|AR|CO)/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null;}catch(e){}}
+try{pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}catch(e){}
+function unlockSpeech(){try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;u.lang='es-ES';speechSynthesis.speak(u);}catch(e){}}
 $('voiceBtn').onclick=e=>{voiceOn=!voiceOn;e.currentTarget.setAttribute('aria-pressed',voiceOn);if(!voiceOn)try{speechSynthesis.cancel()}catch(_){}};
+function speak(text){
+  teacher.classList.add('talking'); speaking=true;
+  const est=900+text.length*62;
+  return new Promise(res=>{
+    let d=false; const fin=()=>{if(d)return;d=true;speaking=false;teacher.classList.remove('talking');res();};
+    if(voiceOn&&'speechSynthesis' in window){
+      try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.replace(/[“”]/g,''));u.lang=voice?voice.lang:'es-ES';if(voice)u.voice=voice;u.rate=.95;u.pitch=1.25;u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);setTimeout(fin,est+3500);}catch(e){setTimeout(fin,est);}
+    }else setTimeout(fin,est);
+  });
+}
+let lastQuick=0;
+function quickSay(text,force){ // feedback during play: never blocks the class
+  bubble.textContent=text;
+  const now=performance.now(); if(!force&&now-lastQuick<2500) return; lastQuick=now;
+  speak(text);
+}
 
-/* ---------- microphone pitch detection ---------- */
-const PC2KEY={0:0,2:1,4:2,5:3,7:4,9:5};
-const PCNAME=['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
-const mic={on:false,an:null,buf:null,stream:null,armed:true,minSince:0,lastAcc:0,cand:-1,candN:0,silent:0};
-const heardEl=$('heard'),heardNote=$('heardNote'); let tapAt=0;
-function autoCorr(buf,sr){
-  const n=buf.length; let rms=0; for(let i=0;i<n;i++)rms+=buf[i]*buf[i]; rms=Math.sqrt(rms/n);
-  if(rms<0.012) return {f:-1,rms};
-  // trim to the strongest part
-  let a=0,b=n-1; const th=0.2;
-  for(let i=0;i<n/2;i++){if(Math.abs(buf[i])<th){a=i;break;}}
-  for(let i=1;i<n/2;i++){if(Math.abs(buf[n-i])<th){b=n-i;break;}}
-  const x=buf.slice(a,b), m=x.length; if(m<400) return {f:-1,rms};
-  const minLag=Math.floor(sr/1100), maxLag=Math.min(m-1,Math.floor(sr/90));
-  const c=new Float32Array(maxLag+2);
-  for(let lag=minLag;lag<=maxLag+1;lag++){let s=0;for(let i=0;i<m-lag;i++)s+=x[i]*x[i+lag];c[lag]=s;}
-  let d=minLag; while(d<maxLag&&c[d]>c[d+1])d++;
-  let best=-1,bv=-Infinity; for(let i=d;i<=maxLag;i++){if(c[i]>bv){bv=c[i];best=i;}}
-  if(best<=0) return {f:-1,rms};
-  const y1=c[best-1]||0,y2=c[best],y3=c[best+1]||0, p=(y1-y3)/(2*(y1-2*y2+y3)||1);
-  return {f:sr/(best+(isFinite(p)?p:0)),rms};
-}
-async function startMic(){
-  const a=audio();
-  if(!a||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error('nomic');
-  const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
-  const src=a.createMediaStreamSource(s); const an=a.createAnalyser(); an.fftSize=2048; src.connect(an);
-  Object.assign(mic,{on:true,an,stream:s,buf:new Float32Array(an.fftSize),armed:true,cand:-1,candN:0});
-  heardEl.hidden=false; $('micBtn').setAttribute('aria-pressed','true');
-  micLoop();
-}
-function stopMic(){
-  if(mic.stream)mic.stream.getTracks().forEach(t=>t.stop());
-  mic.on=false;mic.an=null;mic.stream=null;heardEl.hidden=true;$('micBtn').setAttribute('aria-pressed','false');
-}
-function micLoop(){
-  if(!mic.on) return;
-  mic.an.getFloatTimeDomainData(mic.buf);
-  const {f,rms}=autoCorr(mic.buf,ac.sampleRate), now=performance.now();
-  // re-arm on a new strike: the level jumps up again after decaying (needed for repeated notes)
-  if(!mic.armed){ mic.minSince=Math.min(mic.minSince,rms); if(now-mic.lastAcc>140&&rms>0.02&&rms>mic.minSince*1.6){mic.armed=true;mic.cand=-1;mic.candN=0;} if(rms<0.012)mic.silent++; else mic.silent=0; if(mic.silent>4){mic.armed=true;} }
-  if(f>0){
-    const midi=Math.round(69+12*Math.log2(f/440)), pc=((midi%12)+12)%12;
-    heardNote.textContent=PCNAME[pc];
-    if(pc===mic.cand)mic.candN++; else {mic.cand=pc;mic.candN=1;}
-    if(mic.armed&&mic.candN>=2){
-      mic.armed=false; mic.lastAcc=now; mic.minSince=rms; mic.silent=0;
-      const k=PC2KEY[pc]; heardEl.classList.toggle('ok',k!==undefined);
-      if(k!==undefined) press(k,true); else heardBlack(PCNAME[pc]);
-    }
-  }else if(rms<0.012){heardNote.textContent='…';}
-  requestAnimationFrame(micLoop);
-}
-function heardBlack(name){ if(eng.mode==='practice'){eng.misses++;bubble.textContent='Escuché '+name+', una tecla negra. Busca la blanca '+NOTES[eng.seq[eng.idx].k].col+'.';} }
-$('micBtn').onclick=async()=>{ if(mic.on){stopMic();return;} try{await startMic();bubble.textContent='¡Te escucho! Toca una tecla de tu piano.';}catch(e){micFail();} };
-function micFail(){bubble.textContent='No puedo usar el micrófono aquí. Abre el archivo de la lección en Chrome y permite el micrófono. Mientras, puedes tocar en la pantalla.';}
-
-/* ---------- keyboard ---------- */
+/* ================= keyboard on screen ================= */
 const keyEls=NOTES.map((nt,i)=>{
-  const b=document.createElement('button'); b.className='key'; b.id='key'+i; b.style.setProperty('--c',nt.c);
-  b.innerHTML='<span class="fing">'+nt.fing+'</span><span class="lbl">'+nt.n+'</span>'; b.setAttribute('aria-label','Tecla '+nt.n);
-  b.addEventListener('pointerdown',e=>{e.preventDefault();press(i);}); keysEl.appendChild(b); return b;
+  const b=document.createElement('button');b.className='key';b.id='key'+i;b.style.setProperty('--c',nt.c);
+  b.innerHTML='<span class="fing">'+nt.fing+'</span><span class="lbl">'+nt.n+'</span>';b.setAttribute('aria-label','Tecla '+nt.n);
+  b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(NOTES[i].f);input(i);});keysEl.appendChild(b);return b;
 });
 BLACK.forEach(bk=>{const b=document.createElement('button');b.className='bkey';b.tabIndex=-1;b.setAttribute('aria-hidden','true');
   b.style.left='calc('+bk.pos+' * (100% + 4px) / 6 - 2px)';
-  b.addEventListener('pointerdown',e=>{e.preventDefault();tone(bk.f);b.classList.add('down');setTimeout(()=>b.classList.remove('down'),160);}); keysEl.appendChild(b);});
+  b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(bk.f);b.classList.add('down');setTimeout(()=>b.classList.remove('down'),160);wrong('una tecla negra');});keysEl.appendChild(b);});
 const KMAP={a:0,s:1,d:2,f:3,g:4,h:5};
-addEventListener('keydown',e=>{if(e.repeat)return;const k=KMAP[e.key.toLowerCase()];if(k!==undefined)press(k);});
+addEventListener('keydown',e=>{if(e.repeat)return;const k=KMAP[e.key.toLowerCase()];if(k!==undefined){tapAt=performance.now();tone(NOTES[k].f);input(k);}});
+let tapAt=0;
 function flash(i){const k=keyEls[i];k.classList.add('down');setTimeout(()=>k.classList.remove('down'),180);}
 function glow(i){keyEls.forEach((k,j)=>k.classList.toggle('glow',j===i));}
 
-/* ---------- lane / engine ---------- */
-let W=0,H=0,dpr=1;
-function resize(){dpr=Math.min(2,window.devicePixelRatio||1);W=lane.clientWidth;H=lane.clientHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
-new ResizeObserver(resize).observe(lane); resize();
-const FALL=2.4; // seconds a note is visible before reaching the line
-const eng={mode:'idle',seq:[],clock:0,idx:0,waiting:false,misses:0,done:null,lyr:null};
+/* Note detector: onset (fast RMS rise over an adaptive noise floor) + pitch class from YIN and FFT chroma. */
+function makeDetector(sr){
+  const N=8192, W=1024, M=4096;
+  const win=new Float32Array(M); for(let i=0;i<M;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/(M-1));
+  const re=new Float32Array(N), im=new Float32Array(N), mag=new Float32Array(N/2);
+  const rev=new Uint32Array(N); for(let i=0,b=Math.log2(N);i<N;i++){let x=i,r=0;for(let j=0;j<b;j++){r=(r<<1)|(x&1);x>>=1;}rev[i]=r;}
+  const yd=new Float32Array(W);
+  function fft(){
+    for(let i=0;i<N;i++){const j=rev[i];if(j>i){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t;}}
+    for(let s=2;s<=N;s<<=1){const h=s>>1,a=-2*Math.PI/s,wr=Math.cos(a),wi=Math.sin(a);
+      for(let k=0;k<N;k+=s){let cr=1,ci=0;for(let j=0;j<h;j++){const p=k+j,q=p+h,tr=re[q]*cr-im[q]*ci,ti=re[q]*ci+im[q]*cr;re[q]=re[p]-tr;im[q]=im[p]-ti;re[p]+=tr;im[p]+=ti;const nr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nr;}}}
+  }
+  function chroma(buf){
+    const o=N-M; let mean=0;for(let i=0;i<M;i++)mean+=buf[o+i];mean/=M;
+    for(let i=0;i<N;i++){re[i]=i<M?(buf[o+i]-mean)*win[i]:0;im[i]=0;}
+    fft();
+    const lo=Math.floor(70*N/sr), hi=Math.min(N/2-2,Math.ceil(2600*N/sr));
+    let mx=0;for(let k=lo;k<=hi;k++){mag[k]=Math.hypot(re[k],im[k]);if(mag[k]>mx)mx=mag[k];}
+    const c=new Float32Array(12); if(mx<=0) return c;
+    for(let k=lo+1;k<hi;k++){
+      const m=mag[k]; if(m<mx*0.06||m<mag[k-1]||m<mag[k+1]) continue;
+      const a=mag[k-1],b=m,g=mag[k+1],p=0.5*(a-g)/(a-2*b+g||1e-9);
+      const f=(k+p)*sr/N, midi=69+12*Math.log2(f/440), r=Math.round(midi);
+      if(Math.abs(midi-r)>0.35) continue;
+      const w=f<300?1.25:f<700?1:f<1300?0.7:0.45; // favour fundamentals over upper partials
+      c[((r%12)+12)%12]+=m*w;
+    }
+    let s=0;for(let i=0;i<12;i++)if(c[i]>s)s=c[i]; if(s>0)for(let i=0;i<12;i++)c[i]/=s;
+    return c;
+  }
+  function yin(buf){
+    const off=N-2*W, tmin=Math.floor(sr/1500), tmax=Math.min(W-1,Math.ceil(sr/75));
+    let run=0; yd[0]=1;
+    for(let t=1;t<=tmax;t++){let s=0;for(let j=0;j<W;j++){const d=buf[off+j]-buf[off+j+t];s+=d*d;}run+=s;yd[t]=run>0?s*t/run:1;}
+    let tau=-1;
+    for(let t=tmin;t<=tmax;t++){if(yd[t]<0.15){while(t+1<=tmax&&yd[t+1]<yd[t])t++;tau=t;break;}}
+    if(tau<0){let b=1;for(let t=tmin;t<=tmax;t++)if(yd[t]<b){b=yd[t];tau=t;}}
+    if(tau<=tmin||tau>=tmax) return {f:-1,conf:0};
+    const a=yd[tau-1],b=yd[tau],g=yd[tau+1],p=0.5*(a-g)/(a-2*b+g||1e-9);
+    return {f:sr/(tau+(isFinite(p)?Math.max(-1,Math.min(1,p)):0)),conf:1-b};
+  }
+  function shortRms(buf){let s=0;for(let i=N-W;i<N;i++)s+=buf[i]*buf[i];return Math.sqrt(s/W);}
+  const pcOf=f=>{const r=Math.round(69+12*Math.log2(f/440));return ((r%12)+12)%12;};
+
+  const st={noise:0.002,hist:[],lastOnset:-1e9,pending:null};
+  return {
+    N,
+    /* feed the most recent N samples at time `now` (ms). target = expected pitch class or -1.
+       returns null, or {pc} once per struck note. `mute` suppresses detection (app is making sound). */
+    step(buf,now,target,mute){
+      const r=shortRms(buf);
+      // adaptive noise floor: drops fast, rises slowly
+      st.noise = r<st.noise ? st.noise*0.7+r*0.3 : st.noise*1.004;
+      st.hist.push({t:now,r}); while(st.hist.length&&now-st.hist[0].t>260)st.hist.shift();
+      let recentMin=Infinity; for(const h of st.hist) if(now-h.t>30&&now-h.t<130&&h.r<recentMin) recentMin=h.r;
+      if(recentMin===Infinity) recentMin=r;
+      const level=Math.max(0,Math.min(1,Math.log10(r/0.0005)/2.5));
+      if(mute){st.pending=null;return {level};}
+      if(!st.pending && now-st.lastOnset>170 && r>Math.max(0.0012,st.noise*2.2) && r>recentMin*1.5){
+        st.pending={t:now,peak:r}; st.lastOnset=now;
+      }
+      if(st.pending){
+        if(r>st.pending.peak)st.pending.peak=r;
+        if(now-st.pending.t>=95){
+          st.pending=null;
+          const y=yin(buf), c=chroma(buf);
+          let best=0;for(let i=1;i<12;i++)if(c[i]>c[best])best=i;
+          const pcY=(y.conf>0.75&&y.f>60&&y.f<2200)?pcOf(y.f):-1;
+          let pc;
+          if(target>=0 && (pcY===target || (c[target]>=0.8 && !(y.conf>0.88&&pcY>=0&&pcY!==target)))) pc=target;
+          else if(pcY>=0 && c[pcY]>=0.35) pc=pcY;
+          else if(c[best]>0) pc=best;
+          else return {level};
+          return {level,pc,f:y.f,conf:y.conf};
+        }
+      }
+      return {level};
+    }
+  };
+}
+
+/* ================= microphone ================= */
+const NOTE_PC=[0,2,4,5,7,9];
+const mic={on:false,an:null,buf:null,det:null,stream:null,timer:0,lastHeard:0};
+const heardEl=$('heard'),heardNote=$('heardNote'),lvl=$('lvl');
+async function startMic(){
+  const a=audio();
+  if(!a||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error('nomic');
+  const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:false,autoGainControl:true}});
+  try{await a.resume();}catch(e){}
+  const src=a.createMediaStreamSource(s), hp=a.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=90;
+  const an=a.createAnalyser(); an.fftSize=8192; an.smoothingTimeConstant=0; src.connect(hp).connect(an);
+  Object.assign(mic,{on:true,an,stream:s,buf:new Float32Array(an.fftSize),det:makeDetector(a.sampleRate)});
+  heardEl.hidden=false; clearInterval(mic.timer); mic.timer=setInterval(micTick,30);
+}
+function stopMic(){clearInterval(mic.timer);if(mic.stream)mic.stream.getTracks().forEach(t=>t.stop());mic.on=false;mic.stream=null;heardEl.hidden=true;}
+function micTick(){
+  if(!mic.on) return;
+  if(ac.state!=='running'){try{ac.resume();}catch(e){}}
+  mic.an.getFloatTimeDomainData(mic.buf);
+  const now=performance.now(), tg=target();
+  // the phone itself is making piano sound (Marina demonstrating, a key intro, a tap on screen)
+  const mute=eng.mode==='demo'||now<soundUntil||now-tapAt<650;
+  const r=mic.det.step(mic.buf,now,tg>=0?NOTE_PC[tg]:-1,mute);
+  lvl.style.width=Math.round(r.level*100)+'%';
+  if(r.pc!==undefined){
+    mic.lastHeard=now; heardNote.textContent=PCNAME[r.pc]; heardEl.classList.toggle('ok',PC2KEY[r.pc]!==undefined);
+    heard(r.pc);
+  }else if(now-mic.lastHeard>1500) heardNote.textContent='…';
+}
+function heard(pc){
+  const now=performance.now();
+  if(now-tapAt<650) return;        // the mic is hearing a key tapped on screen
+  if(eng.mode==='demo') return;    // Marina is playing, not the child
+  const k=PC2KEY[pc], tgt=target();
+  if(k!==undefined&&k===tgt){input(k);return;}
+  if(speaking||now<soundUntil) return; // probably the phone's own voice or sound
+  if(k===undefined) wrong(PCNAME[pc]+', una tecla negra'); else input(k);
+}
+
+/* ================= falling-note lane ================= */
+let W=0,H=0;
+function resize(){const dpr=Math.min(2,window.devicePixelRatio||1);W=lane.clientWidth;H=lane.clientHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
+new ResizeObserver(resize).observe(lane);resize();
+const FALL=2.4;
+const eng={mode:'idle',seq:[],clock:0,idx:0,waiting:false,waitStart:0,hinted:false,done:null,lyr:null};
+let misses=0;
 const bubbles=Array.from({length:14},()=>({x:Math.random(),y:Math.random(),r:2+Math.random()*4,s:.02+Math.random()*.05}));
 function buildSeq(idxs,lyr,beat,lead){let t=lead,out=[];idxs.forEach((k,i)=>{const d=DUR[i%6]*beat;out.push({t,d,k,syl:lyr?lyr[i]:NOTES[k].n,played:false,hit:false});t+=d;if(i%6===5)t+=beat*.5;});return out;}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 let last=performance.now();
 function frame(now){
-  const dt=Math.min(.05,(now-last)/1000); last=now;
-  const hitY=H-14, speed=hitY/FALL, lw=(W-20)/6;
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  const hitY=H-14,speed=hitY/FALL,lw=(W-20)/6;
   if(eng.mode==='demo'){
     eng.clock+=dt;
     eng.seq.forEach((n,i)=>{if(!n.played&&eng.clock>=n.t){n.played=true;tone(NOTES[n.k].f,Math.max(.9,n.d+.3));flash(n.k);setLyric(i);}});
-    const end=eng.seq[eng.seq.length-1]; if(eng.done&&eng.clock>end.t+end.d+.4){const d=eng.done;eng.done=null;eng.mode='idle';d();}
+    const end=eng.seq[eng.seq.length-1];
+    if(eng.done&&eng.clock>end.t+end.d+.4){const d=eng.done;eng.done=null;eng.mode='idle';d();}
   }else if(eng.mode==='practice'){
     const nx=eng.seq[eng.idx];
-    if(nx){ if(!eng.waiting){eng.clock+=dt; if(eng.clock>=nx.t){eng.clock=nx.t;eng.waiting=true;}}
-      glow(nx.t-eng.clock<.7?nx.k:-1);}
+    if(nx){
+      if(!eng.waiting){eng.clock+=dt;if(eng.clock>=nx.t){eng.clock=nx.t;eng.waiting=true;eng.waitStart=now;eng.hinted=false;}}
+      else if(!eng.hinted&&now-eng.waitStart>9000){eng.hinted=true;quickSay(mic.on?'Toca la tecla '+NOTES[nx.k].col+'. Si no te escucho, acerca el teléfono al piano.':'Toca la tecla '+NOTES[nx.k].col+' que brilla.',true);}
+      glow(nx.t-eng.clock<.7?nx.k:-1);
+    }
   }
   ctx.clearRect(0,0,W,H);
-  // ambient bubbles
   ctx.fillStyle='rgba(234,248,246,.12)';
   bubbles.forEach(b=>{b.y-=b.s*dt;if(b.y<-.05){b.y=1.05;b.x=Math.random();}ctx.beginPath();ctx.arc(b.x*W,b.y*H,b.r,0,7);ctx.fill();});
-  // lane guides
   for(let i=0;i<6;i++){ctx.fillStyle=i%2?'rgba(255,255,255,.025)':'rgba(255,255,255,.05)';ctx.fillRect(i*(lw+4),0,lw,hitY);}
-  // notes
   ctx.save();ctx.beginPath();ctx.rect(0,0,W,hitY+2);ctx.clip();
   ctx.textAlign='center';ctx.textBaseline='middle';
   eng.seq.forEach(n=>{
-    if(n.hit) return;
-    const yb=hitY-(n.t-eng.clock)*speed, h=Math.max(26,n.d*speed-6), x=n.k*(lw+4)+3, w=lw-6;
-    if(yb-h>hitY||yb<-10) return;
-    const nt=NOTES[n.k]; ctx.globalAlpha=n.played?.45:1;
-    ctx.fillStyle=nt.c; rr(x,yb-h,w,h,12); ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,.35)'; rr(x+5,yb-h+4,w-10,6,3); ctx.fill();
-    ctx.fillStyle=n.k===2?'#0a2232':'#fff'; ctx.font='700 '+Math.min(18,lw*.3)+'px Fredoka, sans-serif';
-    ctx.fillText(nt.n,x+w/2,yb-Math.min(h/2,18));
-    ctx.globalAlpha=1;
+    if(n.hit)return;
+    const yb=hitY-(n.t-eng.clock)*speed,h=Math.max(26,n.d*speed-6),x=n.k*(lw+4)+3,w=lw-6;
+    if(yb-h>hitY||yb<-10)return;
+    const nt=NOTES[n.k];ctx.globalAlpha=n.played?.45:1;
+    ctx.fillStyle=nt.c;rr(x,yb-h,w,h,12);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.35)';rr(x+5,yb-h+4,w-10,6,3);ctx.fill();
+    ctx.fillStyle=n.k===2?'#0a2232':'#fff';ctx.font='700 '+Math.min(18,lw*.3)+'px Fredoka, sans-serif';
+    ctx.fillText(nt.n,x+w/2,yb-Math.min(h/2,18));ctx.globalAlpha=1;
   });
   ctx.restore();
-  // hit line
   ctx.fillStyle='rgba(255,230,166,.9)';ctx.fillRect(0,hitY,W,4);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-function press(i,fromMic){
-  if(fromMic){ if(performance.now()-tapAt<700) return; }
-  else { tapAt=performance.now(); tone(NOTES[i].f); }
+/* ================= one input path for screen, computer keys and real piano ================= */
+let keyWaiter=null;
+function target(){
+  if(keyWaiter) return keyWaiter.k;
+  if(eng.mode==='practice'){const nx=eng.seq[eng.idx];if(nx&&nx.t-eng.clock<.9)return nx.k;}
+  return -1;
+}
+function input(i){
   flash(i);
-  if(keyWaiter&&keyWaiter.k===i){const r=keyWaiter.res;keyWaiter=null;r();}
-  if(eng.mode!=='practice') return;
-  const nx=eng.seq[eng.idx]; if(!nx) return;
-  if(i===nx.k && nx.t-eng.clock<.9){
-    nx.hit=true; eng.clock=nx.t; eng.waiting=false; setLyric(eng.idx); eng.idx++;
-    if(eng.idx%6===0) bubble.textContent=['¡Muy bien!','¡Bacán!','¡Así se hace!','¡Eres genial!'][(eng.idx/6-1)%4];
-    if(eng.idx>=eng.seq.length){glow(-1);setTimeout(finishPractice,700);}
-  }else if(nx.t-eng.clock<.9){eng.misses++;bubble.textContent='¡Casi! Busca la tecla '+NOTES[nx.k].col+' que brilla.';}
+  if(keyWaiter){
+    if(i===keyWaiter.k){const r=keyWaiter.res;keyWaiter=null;glow(-1);r();}
+    else wrong(NOTES[i].n);
+    return;
+  }
+  if(eng.mode!=='practice')return;
+  const nx=eng.seq[eng.idx];if(!nx)return;
+  if(nx.t-eng.clock>=.9)return;
+  if(i===nx.k){
+    nx.hit=true;eng.clock=nx.t;eng.waiting=false;setLyric(eng.idx);eng.idx++;
+    if(eng.idx>=eng.seq.length){glow(-1);const d=eng.done;eng.done=null;eng.mode='idle';setTimeout(()=>d&&d(),500);}
+  }else wrong(NOTES[i].n);
+}
+function wrong(what){
+  const tg=target(); if(tg<0) return;
+  misses++;
+  quickSay('Esa fue '+what+'. Busca la tecla '+NOTES[tg].col+', '+NOTES[tg].n+'.');
 }
 
-/* ---------- lyrics ---------- */
-function showPhrase(seq,start){
-  eng.lyr={seq,start};
-  lyricsEl.innerHTML=seq.slice(start,start+6).map(n=>'<span>'+n.syl+'</span>').join('');
-}
+/* ================= lyrics ================= */
+function showPhrase(seq,start){eng.lyr={seq,start};lyricsEl.innerHTML=seq.slice(start,start+6).map(n=>'<span>'+n.syl+'</span>').join('');}
 function setLyric(i){
-  const L=eng.lyr; if(!L) return;
-  if(i<L.start||i>=L.start+6) showPhrase(L.seq,Math.floor(i/6)*6);
+  const L=eng.lyr;if(!L)return;
+  if(i<L.start||i>=L.start+6)showPhrase(L.seq,Math.floor(i/6)*6);
   [...lyricsEl.children].forEach((s,j)=>{const g=eng.lyr.start+j;s.className=g===i?'on':g<i?'done':'';});
 }
 
-/* ---------- timeline helpers ---------- */
+/* ================= class timeline (identical for screen and piano) ================= */
 let token=0;
 function check(t){if(t!==token)throw 'cancel';}
 const wait=(ms,t)=>new Promise(r=>setTimeout(r,ms)).then(()=>check(t));
-function say(text,t){
-  bubble.textContent=text; teacher.classList.add('talking');
-  const est=900+text.length*62;
-  return new Promise(res=>{
-    let doneFlag=false; const fin=()=>{if(doneFlag)return;doneFlag=true;teacher.classList.remove('talking');res();};
-    if(voiceOn&&'speechSynthesis' in window){
-      try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.replace(/[“”]/g,''));u.lang=voice?voice.lang:'es-ES';if(voice)u.voice=voice;u.rate=.95;u.pitch=1.25;u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);setTimeout(fin,est+3500);}catch(e){setTimeout(fin,est);}
-    }else setTimeout(fin,est);
-  }).then(()=>wait(250,t));
-}
-function playDemo(seq,t){
-  return new Promise((res,rej)=>{eng.seq=seq;eng.clock=0;eng.mode='demo';eng.done=res;}).then(()=>check(t));
-}
-let keyWaiter=null;
-function waitForKey(k,t){return new Promise(res=>{keyWaiter={k,res};setTimeout(()=>{if(keyWaiter&&keyWaiter.res===res){keyWaiter=null;res();}},15000);}).then(()=>check(t));}
-const SCENES=7;
+function say(text,t){bubble.textContent=text;return speak(text).then(()=>wait(250,t));}
+function waitForKey(k,t){glow(k);return new Promise(res=>{keyWaiter={k,res};}).then(()=>check(t));}
+function demo(seq,t){return new Promise(res=>{eng.seq=seq;eng.clock=0;eng.mode='demo';eng.done=res;}).then(()=>check(t));}
+function play(seq,t){return new Promise(res=>{eng.seq=seq;eng.clock=0;eng.idx=0;eng.waiting=false;eng.mode='practice';eng.done=res;}).then(()=>check(t));}
+const praise=()=>PRAISE[Math.floor(Math.random()*PRAISE.length)];
+const SCENES=8;
 function setProg(i){prog.style.width=(i/SCENES*100)+'%';}
 
 async function lesson(){
-  const t=++token; resetEngine();
+  const t=++token;resetEngine();misses=0;
   try{
     setProg(0);
     await say('¡Hola! Soy Marina, la sirena pianista.',t);
-    await say('Hoy vamos a tocar juntas “Los pollitos dicen”.',t);
+    await say(mic.on?'Hoy tocamos en tu piano “Los pollitos dicen”. Yo te escucho.':'Hoy vamos a tocar “Los pollitos dicen”.',t);
     setProg(1);
-    await say('Mira el piano. Cada tecla tiene su color.',t);
-    for(let i=0;i<6;i++){glow(i);tone(NOTES[i].f);await say('Esta es '+NOTES[i].n+', la '+NOTES[i].col+'.',t);}
-    glow(-1); setProg(2);
-    keysEl.classList.add('show-fingers');
+    await say('Mira las teclas blancas. Cada una tiene su color.',t);
+    await say('En el piano hay grupitos de dos teclas negras. Do es la blanca justo a la izquierda de las dos negras.',t);
+    for(let i=0;i<6;i++){
+      glow(i);tone(NOTES[i].f);
+      await say('Esta es '+NOTES[i].n+', la '+NOTES[i].col+'. ¡Tócala!',t);
+      await waitForKey(i,t);
+      bubble.textContent=praise();await wait(450,t);
+    }
+    setProg(2);keysEl.classList.add('show-fingers');
     await say('Pon tu mano derecha así: el dedo gordo en Do, la roja.',t);
     await say('Cada dedito en una tecla. El meñique queda en Sol.',t);
     await say('Para La, la morada, estira el meñique un poquito.',t);
     keysEl.classList.remove('show-fingers');
-    if(mic.on){
-      await say('En tu piano, busca dos teclas negras juntitas.',t);
-      glow(0); await say('Do es la tecla blanca justo a la izquierda de esas dos negras. ¡Tócala!',t);
-      await waitForKey(0,t); glow(-1);
-      await say('¡Sí! Esa es Do. Ahora mira y escucha cómo va la canción.',t);
-    }
     for(let p=0;p<4;p++){
       setProg(3+p*.75);
       await say(PHRASE_TXT[p],t);
-      const seq=buildSeq(MEL.slice(p*6,p*6+6),V1.slice(p*6,p*6+6),.75,FALL);
-      showPhrase(seq,0); await playDemo(seq,t); await wait(300,t);
+      await say('Mira y escucha.',t);
+      const notes=MEL.slice(p*6,p*6+6),words=V1.slice(p*6,p*6+6);
+      let s=buildSeq(notes,words,.75,FALL);showPhrase(s,0);await demo(s,t);
+      await say('Ahora tú. Toca la tecla que brilla, yo te espero.',t);
+      s=buildSeq(notes,words,.75,FALL);showPhrase(s,0);await play(s,t);
+      await say(praise(),t);
     }
     setProg(6);
-    await say('¡Ahora toda la canción! Canta conmigo mientras bajan las notas.',t);
-    const full=buildSeq(MEL,V1,.62,FALL); showPhrase(full,0); await playDemo(full,t);
-    await say('¡Precioso! Ahora te toca a ti. Toca la tecla que brilla, yo te espero.',t);
+    await say('¡Ahora toda la canción! Primero la toco yo. Canta conmigo.',t);
+    let full=buildSeq(MEL,V1,.62,FALL);showPhrase(full,0);await demo(full,t);
     setProg(7);
-    practice(V1,t);
+    await say('Ahora tú, toda la canción. ¡Tú puedes!',t);
+    full=buildSeq(MEL,V1,.62,FALL);showPhrase(full,0);await play(full,t);
+    setProg(8);finish(V1,t);
   }catch(e){if(e!=='cancel')console.error(e);}
 }
-function resetEngine(){eng.mode='idle';eng.seq=[];eng.done=null;eng.idx=0;eng.misses=0;eng.waiting=false;glow(-1);lyricsEl.innerHTML='';keysEl.classList.remove('show-fingers');try{speechSynthesis.cancel()}catch(e){}teacher.classList.remove('talking');}
 let lastVerse=V1;
-function practice(verse){
-  const t=++token; resetEngine(); lastVerse=verse; setProg(7);
-  bubble.textContent=mic.on?'Tu turno: toca en tu piano la nota del color que brilla. Yo te escucho.':'Tu turno: toca la tecla que brilla. ¡Sin apuro!';
-  const seq=buildSeq(MEL,verse,.62,FALL); showPhrase(seq,0);
-  eng.seq=seq; eng.clock=0; eng.mode='practice';
+async function song(verse){
+  const t=++token;resetEngine();misses=0;lastVerse=verse;setProg(7);
+  try{
+    await say(verse===V2?'Ahora la parte de la gallina. Es la misma música.':'¡Otra vez toda la canción!',t);
+    const s=buildSeq(MEL,verse,.62,FALL);showPhrase(s,0);await play(s,t);
+    setProg(8);finish(verse,t);
+  }catch(e){if(e!=='cancel')console.error(e);}
 }
-function finishPractice(){
-  eng.mode='idle'; const m=eng.misses, s=m<=3?3:m<=8?2:1;
+function finish(verse,t){
+  lastVerse=verse;const s=misses<=4?3:misses<=10?2:1;
   $('stars').innerHTML=[0,1,2].map(i=>'<span class="'+(i<s?'':'off')+'">★</span>').join('');
   $('endTitle').textContent=s===3?'¡Lo lograste!':'¡Muy bien!';
   $('endText').textContent=s===3?'Tocaste toda la canción. ¡Pío, pío, pío!':'Tocaste toda la canción. Otra vez y te sale perfecta.';
-  $('verse2Btn').hidden=lastVerse===V2;
-  $('endOv').hidden=false;
-  say(s===3?'¡Lo lograste! Eres una pianista.':'¡Muy bien! Tocaste toda la canción.',token).catch(()=>{});
+  $('verse2Btn').hidden=verse===V2;$('endOv').hidden=false;
+  say(s===3?'¡Lo lograste! Eres una pianista.':'¡Muy bien! Tocaste toda la canción.',t).catch(()=>{});
+}
+function resetEngine(){
+  eng.mode='idle';eng.seq=[];eng.done=null;eng.idx=0;eng.waiting=false;keyWaiter=null;glow(-1);lyricsEl.innerHTML='';
+  keysEl.classList.remove('show-fingers');try{speechSynthesis.cancel()}catch(e){}speaking=false;teacher.classList.remove('talking');
 }
 
-$('watchBtn').onclick=()=>{audio();$('startOv').hidden=true;lesson();};
-$('practiceBtn').onclick=()=>{audio();$('startOv').hidden=true;practice(V1);};
-$('realBtn').onclick=async()=>{
-  audio();
-  try{ if(!mic.on) await startMic(); $('startOv').hidden=true; lesson(); }
-  catch(e){ $('micHint').textContent='Esta vista no deja usar el micrófono. Abre el archivo de la lección en Chrome (computador o tablet Android) y acepta el permiso del micrófono.'; $('micHint').style.color='#b23a2e'; }
+/* ================= start buttons ================= */
+function begin(){audio();unlockSpeech();} // must run inside the tap, before any await (iPhone)
+$('screenBtn').onclick=()=>{begin();stopMic();$('modeLabel').textContent='Clase con la pantalla';$('startOv').hidden=true;lesson();};
+$('pianoBtn').onclick=async()=>{
+  begin();
+  const hint=$('micHint');hint.textContent='Pidiendo el micrófono…';hint.style.color='';
+  try{
+    if(!mic.on)await startMic();
+    $('modeLabel').textContent='Clase con tu piano';$('startOv').hidden=true;lesson();
+  }catch(e){
+    hint.style.color='#b23a2e';
+    hint.textContent=(e&&e.name==='NotAllowedError')?'El micrófono quedó bloqueado. Actívalo en los permisos del navegador para este sitio y vuelve a intentar.':'Aquí no se puede usar el micrófono. Abre la clase en tintin406.github.io/piano desde Safari o Chrome.';
+  }
 };
-$('againBtn').onclick=()=>{$('endOv').hidden=true;practice(lastVerse);};
-$('verse2Btn').onclick=()=>{$('endOv').hidden=true;practice(V2);};
-$('rewatchBtn').onclick=()=>{$('endOv').hidden=true;lesson();};
-$('restartBtn').onclick=()=>{++token;resetEngine();setProg(0);$('endOv').hidden=true;$('startOv').hidden=false;bubble.textContent='¡Hola! Soy Marina. ¿Aprendemos una canción?';};
+$('againBtn').onclick=()=>{begin();$('endOv').hidden=true;song(lastVerse===V2?V1:lastVerse);};
+$('verse2Btn').onclick=()=>{begin();$('endOv').hidden=true;song(V2);};
+$('rewatchBtn').onclick=()=>{begin();$('endOv').hidden=true;lesson();};
+$('restartBtn').onclick=()=>{++token;resetEngine();stopMic();setProg(0);$('endOv').hidden=true;$('startOv').hidden=false;$('micHint').textContent='Con tu piano: deja el teléfono cerca, sube el volumen y acepta el permiso del micrófono.';$('micHint').style.color='';bubble.textContent='¡Hola! Soy Marina. ¿Aprendemos una canción?';};
 
-// resting frame: show sample notes and first phrase
-const preview=buildSeq(MEL.slice(0,6),V1.slice(0,6),.75,.6); eng.seq=preview; showPhrase(preview,0);
+const preview=buildSeq(MEL.slice(0,6),V1.slice(0,6),.75,.6);eng.seq=preview;showPhrase(preview,0);
 })();
 </script>
 
