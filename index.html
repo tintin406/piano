@@ -66,11 +66,15 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
 .heard .lvl{display:inline-block;width:34px;height:6px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden;vertical-align:middle;margin-right:4px}
 .heard .lvl i{display:block;height:100%;width:0;background:var(--fa);transition:width .06s}
 .modechip{font:700 .75rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.keys{grid-template-columns:repeat(var(--n,6),1fr)}
+.bkey{width:calc((100% - (var(--n,6) - 1) * 4px) / var(--n,6) * .58)}
+.btn small{display:block;font:700 .8rem var(--body);opacity:.92;margin-top:2px}
+.linkbtn{font:800 .9rem var(--body);color:#33525f;background:none;border:0;padding:6px;cursor:pointer;text-decoration:underline}
 </style>
 
 <div class="app" id="app">
   <div class="top">
-    <h1><small id="modeLabel">Lección de piano · Nivel 1</small>Los pollitos dicen</h1>
+    <h1><small id="modeLabel">Lección de piano · Nivel 1</small><span id="songTitle">Los pollitos dicen</span></h1>
     <span class="heard" id="heard" hidden><span class="lvl"><i id="lvl"></i></span><b id="heardNote">…</b></span>
     <button class="tbtn" id="voiceBtn" aria-pressed="true">🔊 Voz</button>
     <button class="tbtn" id="restartBtn">Inicio</button>
@@ -103,11 +107,20 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
 
   <div class="overlay" id="startOv">
     <div class="card">
-      <h2>Los pollitos dicen</h2>
-      <p>Una clase de piano con Marina. Es la misma clase con la pantalla o con tu piano.</p>
+      <h2>Piano con Marina</h2>
+      <p>¿Cómo vas a tocar? Es la misma clase con la pantalla o con tu piano. Después eliges la canción.</p>
       <button class="btn mic" id="pianoBtn">🎹 Clase con mi piano</button>
       <button class="btn alt" id="screenBtn">👆 Clase con la pantalla</button>
       <p class="hint" id="micHint">Con tu piano: deja el teléfono cerca, sube el volumen y acepta el permiso del micrófono.</p>
+    </div>
+  </div>
+  <div class="overlay" id="songOv" hidden>
+    <div class="card">
+      <h2>¿Qué canción tocamos?</h2>
+      <button class="btn" data-song="pollitos">🐣 Los pollitos dicen<small>6 teclas · la más fácil</small></button>
+      <button class="btn alt" data-song="cumple">🎂 Cumpleaños feliz<small>8 teclas · dos manos</small></button>
+      <button class="btn mic" data-song="arroz">🍚 Arroz con leche<small>7 teclas · dos manos</small></button>
+      <button class="linkbtn" id="backBtn">← Cambiar pantalla o piano</button>
     </div>
   </div>
   <div class="overlay" id="endOv" hidden>
@@ -118,34 +131,91 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
       <button class="btn" id="againBtn">🎹 Tocar otra vez</button>
       <button class="btn alt" id="verse2Btn">🐔 Tocar la parte de la gallina</button>
       <button class="btn alt" id="rewatchBtn">▶ Repetir la clase</button>
+      <button class="btn mic" id="otherSongBtn">🎵 Elegir otra canción</button>
     </div>
   </div>
 </div>
-
 <script>
 (function(){
-const NOTES=[
-  {n:'Do',f:261.63,c:'#f0524f',col:'roja',fing:'1'},
-  {n:'Re',f:293.66,c:'#ff9a3c',col:'naranja',fing:'2'},
-  {n:'Mi',f:329.63,c:'#ffd23f',col:'amarilla',fing:'3'},
-  {n:'Fa',f:349.23,c:'#4cc96b',col:'verde',fing:'4'},
-  {n:'Sol',f:392.00,c:'#3fa3ff',col:'azul',fing:'5'},
-  {n:'La',f:440.00,c:'#a56bf0',col:'morada',fing:'5↗'}
-];
-const BLACK=[{pos:1,f:277.18},{pos:2,f:311.13},{pos:4,f:369.99},{pos:5,f:415.30}];
-const MEL=[0,1,2,3,4,4, 5,5,5,5,4,4, 3,3,3,3,2,2, 1,1,1,1,0,0];
-const DUR=[1,1,1,1,1,2];
-const V1=['Los','po','lli','tos','di','cen','pí','o','pí','o','pí','o','cuan','do','tie','nen','ham','bre','cuan','do','tie','nen','frí','o'];
-const V2=['La','ga','lli','na','bus','ca','el','ma','íz','y el','tri','go','les','da','la','co','mi','da','y','les','pres','ta a','bri','go'];
-const PHRASE_TXT=[
-  '“Los pollitos dicen” sube como una escalera: Do, Re, Mi, Fa, Sol, Sol.',
-  '“Pío, pío, pío”: cuatro veces La, la morada, y bajamos a Sol.',
-  '“Cuando tienen hambre”: cuatro veces Fa, la verde, y después Mi.',
-  '“Cuando tienen frío”: cuatro veces Re, y terminamos en Do, la roja.'];
-const PRAISE=['¡Muy bien!','¡Bacán!','¡Así se hace!','¡Eres genial!','¡Excelente!'];
-const PC2KEY={0:0,2:1,4:2,5:3,7:4,9:5};
-const PCNAME=['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
+/* Every white key the songs use, by MIDI number. A colour always means the same key. */
+const KEYINFO={
+  55:{n:'Sol',col:'celeste',c:'#8fd3ff',dark:1},
+  57:{n:'La',col:'lila',c:'#d4b5ff',dark:1},
+  59:{n:'Si',col:'rosada',c:'#ff7fb6'},
+  60:{n:'Do',col:'roja',c:'#f0524f'},
+  62:{n:'Re',col:'naranja',c:'#ff9a3c'},
+  64:{n:'Mi',col:'amarilla',c:'#ffd23f',dark:1},
+  65:{n:'Fa',col:'verde',c:'#4cc96b'},
+  67:{n:'Sol',col:'azul',c:'#3fa3ff'},
+  69:{n:'La',col:'morada',c:'#a56bf0'}
+};
+const midiF=m=>440*Math.pow(2,(m-69)/12);
 
+/* Songs: keys (low to high), four phrases of notes (MIDI), durations in beats, lyrics, and Marina's explanations. */
+const SONGS={
+  pollitos:{
+    title:'Los pollitos dicen',
+    keys:[60,62,64,65,67,69],
+    fing:{60:'1',62:'2',64:'3',65:'4',67:'5',69:'5↗'},
+    keyIntro:[],
+    hand:['Pon tu mano derecha así: el dedo gordo en Do, la roja.','Cada dedito en una tecla. El meñique queda en Sol.','Para La, la morada, estira el meñique un poquito.'],
+    phrases:[
+      {m:[60,62,64,65,67,67],d:[1,1,1,1,1,2],v1:['Los','po','lli','tos','di','cen'],v2:['La','ga','lli','na','bus','ca'],
+       txt:'“Los pollitos dicen” sube como una escalera: Do, Re, Mi, Fa, Sol, Sol.'},
+      {m:[69,69,69,69,67,67],d:[1,1,1,1,1,2],v1:['pí','o','pí','o','pí','o'],v2:['el','ma','íz','y el','tri','go'],
+       txt:'“Pío, pío, pío”: cuatro veces La, la morada, y bajamos a Sol.'},
+      {m:[65,65,65,65,64,64],d:[1,1,1,1,1,2],v1:['cuan','do','tie','nen','ham','bre'],v2:['les','da','la','co','mi','da'],
+       txt:'“Cuando tienen hambre”: cuatro veces Fa, la verde, y después Mi.'},
+      {m:[62,62,62,62,60,60],d:[1,1,1,1,1,2],v1:['cuan','do','tie','nen','frí','o'],v2:['y','les','pres','ta a','bri','go'],
+       txt:'“Cuando tienen frío”: cuatro veces Re, y terminamos en Do, la roja.'}
+    ],
+    v2Label:'🐔 Tocar la parte de la gallina',
+    v2Say:'Ahora la parte de la gallina. Es la misma música.',
+    winSay:'¡Lo lograste! Eres una pianista.',
+    winText:'Tocaste toda la canción. ¡Pío, pío, pío!'
+  },
+  cumple:{
+    title:'Cumpleaños feliz',
+    keys:[55,57,59,60,62,64,65,67],
+    keyIntro:['Esta canción usa más teclas. Empieza más abajo, a la izquierda del Do.'],
+    hand:['Usa las dos manos. La mano izquierda toca Sol bajito, La y Si.','La mano derecha toca desde Do hasta Sol alto.','Hay dos Sol: el bajito es celeste y el alto es azul.'],
+    phrases:[
+      {m:[55,55,57,55,60,59],d:[.6,.4,1,1,1,2],v1:['Cum','ple','a','ños','fe','liz'],
+       txt:'“Cumpleaños feliz”: Sol bajito dos veces, La, Sol, subimos a Do y bajamos a Si.'},
+      {m:[55,55,57,55,62,60],d:[.6,.4,1,1,1,2],v1:['te','de','sea','mos','a','ti'],
+       txt:'“Te deseamos a ti”: Sol, Sol, La, Sol, después Re y terminamos en Do.'},
+      {m:[55,55,67,64,60,59,57],d:[.6,.4,1,1,1,1,2],v1:['cum','ple','a','ños','pa','ra','ti'],
+       txt:'Ahora un salto: Sol bajito dos veces y luego Sol alto, la azul. Después bajamos: Mi, Do, Si y La.'},
+      {m:[65,65,64,60,62,60],d:[.6,.4,1,1,1,2],v1:['cum','ple','a','ños','fe','liz'],
+       txt:'“Cumpleaños feliz”: Fa dos veces, Mi, Do, Re, y terminamos en Do.'}
+    ],
+    winSay:'¡Lo lograste! Ya la puedes tocar en el próximo cumpleaños.',
+    winText:'Tocaste Cumpleaños feliz. ¡A tocarla en la próxima torta!'
+  },
+  arroz:{
+    title:'Arroz con leche',
+    keys:[55,57,59,60,62,64,65],
+    keyIntro:['Esta canción usa más teclas. Empieza más abajo, a la izquierda del Do.'],
+    hand:['Usa las dos manos. La mano izquierda toca Sol, La y Si.','La mano derecha toca Do, Re, Mi y Fa.'],
+    phrases:[
+      {m:[55,60,60,64,60],d:[.5,1,.5,1,1.5],v1:['A','rroz','con','le','che'],v2:['que','se','pa','co','ser'],
+       txt:'“Arroz con leche”: Sol, Do, Do, Mi, y volvemos a Do.'},
+      {m:[55,60,60,64,62],d:[.5,1,.5,1,1.5],v1:['me','quie','ro','ca','sar'],v2:['que','se','pa','bor','dar'],
+       txt:'“Me quiero casar”: casi igual. Sol, Do, Do, Mi, y terminamos en Re.'},
+      {m:[64,65,64,62,60,59,59],d:[.5,1,.5,1,.5,1,.5],v1:['con','u','na','se','ño','ri','ta'],v2:['que','se','pa a','brir','la','puer','ta'],
+       txt:'“Con una señorita”: Mi, Fa, Mi, Re, Do, y Si dos veces.'},
+      {m:[55,57,59,59,60],d:[.5,1,.5,1,1.5],v1:['de','San','Ni','co','lás'],v2:['pa','ra ir','a','ju','gar'],
+       txt:'“De San Nicolás”: una escalera. Sol, La, Si, Si, y llegamos a Do.'}
+    ],
+    v2Label:'🧵 Tocar “que sepa coser”',
+    v2Say:'Ahora la segunda parte: “que sepa coser”. Es la misma música.',
+    winSay:'¡Lo lograste! Tocaste Arroz con leche.',
+    winText:'Tocaste toda la canción. ¡Muy bien!'
+  }
+};
+const PRAISE=['¡Muy bien!','¡Bacán!','¡Así se hace!','¡Eres genial!','¡Excelente!'];
+const PCNAME=['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
+const WHITE_PC=[0,2,4,5,7,9,11];
 const $=id=>document.getElementById(id);
 const bubble=$('bubble'),teacher=$('teacher'),keysEl=$('keys'),lyricsEl=$('lyrics'),cv=$('cv'),ctx=cv.getContext('2d'),lane=$('lane'),prog=$('prog');
 
@@ -189,21 +259,27 @@ function quickSay(text,force){ // feedback during play: never blocks the class
   speak(text);
 }
 
-/* ================= keyboard on screen ================= */
-const keyEls=NOTES.map((nt,i)=>{
-  const b=document.createElement('button');b.className='key';b.id='key'+i;b.style.setProperty('--c',nt.c);
-  b.innerHTML='<span class="fing">'+nt.fing+'</span><span class="lbl">'+nt.n+'</span>';b.setAttribute('aria-label','Tecla '+nt.n);
-  b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(NOTES[i].f);input(i);});keysEl.appendChild(b);return b;
-});
-BLACK.forEach(bk=>{const b=document.createElement('button');b.className='bkey';b.tabIndex=-1;b.setAttribute('aria-hidden','true');
-  b.style.left='calc('+bk.pos+' * (100% + 4px) / 6 - 2px)';
-  b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(bk.f);b.classList.add('down');setTimeout(()=>b.classList.remove('down'),160);wrong('una tecla negra');});keysEl.appendChild(b);});
-const KMAP={a:0,s:1,d:2,f:3,g:4,h:5};
-addEventListener('keydown',e=>{if(e.repeat)return;const k=KMAP[e.key.toLowerCase()];if(k!==undefined){tapAt=performance.now();tone(NOTES[k].f);input(k);}});
-let tapAt=0;
-function flash(i){const k=keyEls[i];k.classList.add('down');setTimeout(()=>k.classList.remove('down'),180);}
+/* ================= keyboard on screen (rebuilt for each song) ================= */
+let song=null,keys=[],keyEls=[],tapAt=0;
+function buildKeyboard(){
+  keysEl.innerHTML='';const n=keys.length;keysEl.style.setProperty('--n',n);
+  keyEls=keys.map((kk,i)=>{
+    const b=document.createElement('button');b.className='key';b.style.setProperty('--c',kk.c);
+    b.innerHTML=(kk.fing?'<span class="fing">'+kk.fing+'</span>':'')+'<span class="lbl">'+kk.n+'</span>';b.setAttribute('aria-label','Tecla '+kk.spoken);
+    b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(kk.f);input(i);});keysEl.appendChild(b);return b;
+  });
+  for(let i=1;i<n;i++){
+    if(keys[i].m-keys[i-1].m!==2) continue; // black key only between whole steps
+    const f=midiF(keys[i-1].m+1),b=document.createElement('button');b.className='bkey';b.tabIndex=-1;b.setAttribute('aria-hidden','true');
+    b.style.left='calc('+i+' * (100% + 4px) / '+n+' - 2px)';
+    b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(f);b.classList.add('down');setTimeout(()=>b.classList.remove('down'),160);wrong('una tecla negra');});
+    keysEl.appendChild(b);
+  }
+}
+const KMAP='asdfghjk';
+addEventListener('keydown',e=>{if(e.repeat||!e.key)return;const k=KMAP.indexOf(e.key.toLowerCase());if(k>=0&&k<keys.length){tapAt=performance.now();tone(keys[k].f);input(k);}});
+function flash(i){const k=keyEls[i];if(!k)return;k.classList.add('down');setTimeout(()=>k.classList.remove('down'),180);}
 function glow(i){keyEls.forEach((k,j)=>k.classList.toggle('glow',j===i));}
-
 /* Note detector: onset (fast RMS rise over an adaptive noise floor) + pitch class from YIN and FFT chroma. */
 function makeDetector(sr){
   const N=8192, W=1024, M=4096;
@@ -286,7 +362,6 @@ function makeDetector(sr){
 }
 
 /* ================= microphone ================= */
-const NOTE_PC=[0,2,4,5,7,9];
 const mic={on:false,an:null,buf:null,det:null,stream:null,timer:0,lastHeard:0};
 const heardEl=$('heard'),heardNote=$('heardNote'),lvl=$('lvl');
 async function startMic(){
@@ -307,10 +382,10 @@ function micTick(){
   const now=performance.now(), tg=target();
   // the phone itself is making piano sound (Marina demonstrating, a key intro, a tap on screen)
   const mute=eng.mode==='demo'||now<soundUntil||now-tapAt<650;
-  const r=mic.det.step(mic.buf,now,tg>=0?NOTE_PC[tg]:-1,mute);
+  const r=mic.det.step(mic.buf,now,tg>=0?keys[tg].pc:-1,mute);
   lvl.style.width=Math.round(r.level*100)+'%';
   if(r.pc!==undefined){
-    mic.lastHeard=now; heardNote.textContent=PCNAME[r.pc]; heardEl.classList.toggle('ok',PC2KEY[r.pc]!==undefined);
+    mic.lastHeard=now; heardNote.textContent=PCNAME[r.pc]; heardEl.classList.toggle('ok',keys.some(x=>x.pc===r.pc));
     heard(r.pc);
   }else if(now-mic.lastHeard>1500) heardNote.textContent='…';
 }
@@ -318,10 +393,11 @@ function heard(pc){
   const now=performance.now();
   if(now-tapAt<650) return;        // the mic is hearing a key tapped on screen
   if(eng.mode==='demo') return;    // Marina is playing, not the child
-  const k=PC2KEY[pc], tgt=target();
-  if(k!==undefined&&k===tgt){input(k);return;}
+  const tgt=target();
+  if(tgt>=0&&keys[tgt].pc===pc){input(tgt);return;} // any octave counts
   if(speaking||now<soundUntil) return; // probably the phone's own voice or sound
-  if(k===undefined) wrong(PCNAME[pc]+', una tecla negra'); else input(k);
+  const k=keys.findIndex(x=>x.pc===pc);
+  if(k>=0) input(k); else wrong(WHITE_PC.includes(pc)?PCNAME[pc]:PCNAME[pc]+', una tecla negra');
 }
 
 /* ================= falling-note lane ================= */
@@ -332,40 +408,47 @@ const FALL=2.4;
 const eng={mode:'idle',seq:[],clock:0,idx:0,waiting:false,waitStart:0,hinted:false,done:null,lyr:null};
 let misses=0;
 const bubbles=Array.from({length:14},()=>({x:Math.random(),y:Math.random(),r:2+Math.random()*4,s:.02+Math.random()*.05}));
-function buildSeq(idxs,lyr,beat,lead){let t=lead,out=[];idxs.forEach((k,i)=>{const d=DUR[i%6]*beat;out.push({t,d,k,syl:lyr?lyr[i]:NOTES[k].n,played:false,hit:false});t+=d;if(i%6===5)t+=beat*.5;});return out;}
+/* phrases: indexes into song.phrases; verse: 'v1' or 'v2' */
+function buildSeq(phrases,verse,beat,lead){
+  let t=lead;const out=[];
+  phrases.forEach(p=>{const P=song.phrases[p],lyr=P[verse]||P.v1;
+    P.m.forEach((m,i)=>{const d=P.d[i]*beat;out.push({t,d,k:song.keys.indexOf(m),syl:lyr[i],p,played:false,hit:false});t+=d;});
+    t+=beat*.5;});
+  return out;
+}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 let last=performance.now();
 function frame(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;
-  const hitY=H-14,speed=hitY/FALL,lw=(W-20)/6;
+  const n=Math.max(1,keys.length),hitY=H-14,speed=hitY/FALL,lw=(W-(n-1)*4)/n;
   if(eng.mode==='demo'){
     eng.clock+=dt;
-    eng.seq.forEach((n,i)=>{if(!n.played&&eng.clock>=n.t){n.played=true;tone(NOTES[n.k].f,Math.max(.9,n.d+.3));flash(n.k);setLyric(i);}});
+    eng.seq.forEach((s,i)=>{if(!s.played&&eng.clock>=s.t){s.played=true;tone(keys[s.k].f,Math.max(.9,s.d+.3));flash(s.k);setLyric(i);}});
     const end=eng.seq[eng.seq.length-1];
     if(eng.done&&eng.clock>end.t+end.d+.4){const d=eng.done;eng.done=null;eng.mode='idle';d();}
   }else if(eng.mode==='practice'){
     const nx=eng.seq[eng.idx];
     if(nx){
       if(!eng.waiting){eng.clock+=dt;if(eng.clock>=nx.t){eng.clock=nx.t;eng.waiting=true;eng.waitStart=now;eng.hinted=false;}}
-      else if(!eng.hinted&&now-eng.waitStart>9000){eng.hinted=true;quickSay(mic.on?'Toca la tecla '+NOTES[nx.k].col+'. Si no te escucho, acerca el teléfono al piano.':'Toca la tecla '+NOTES[nx.k].col+' que brilla.',true);}
+      else if(!eng.hinted&&now-eng.waitStart>9000){eng.hinted=true;quickSay(mic.on?'Toca la tecla '+keys[nx.k].col+'. Si no te escucho, acerca el teléfono al piano.':'Toca la tecla '+keys[nx.k].col+' que brilla.',true);}
       glow(nx.t-eng.clock<.7?nx.k:-1);
     }
   }
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle='rgba(234,248,246,.12)';
   bubbles.forEach(b=>{b.y-=b.s*dt;if(b.y<-.05){b.y=1.05;b.x=Math.random();}ctx.beginPath();ctx.arc(b.x*W,b.y*H,b.r,0,7);ctx.fill();});
-  for(let i=0;i<6;i++){ctx.fillStyle=i%2?'rgba(255,255,255,.025)':'rgba(255,255,255,.05)';ctx.fillRect(i*(lw+4),0,lw,hitY);}
+  for(let i=0;i<n;i++){ctx.fillStyle=i%2?'rgba(255,255,255,.025)':'rgba(255,255,255,.05)';ctx.fillRect(i*(lw+4),0,lw,hitY);}
   ctx.save();ctx.beginPath();ctx.rect(0,0,W,hitY+2);ctx.clip();
   ctx.textAlign='center';ctx.textBaseline='middle';
-  eng.seq.forEach(n=>{
-    if(n.hit)return;
-    const yb=hitY-(n.t-eng.clock)*speed,h=Math.max(26,n.d*speed-6),x=n.k*(lw+4)+3,w=lw-6;
+  eng.seq.forEach(s=>{
+    if(s.hit||!keys[s.k])return;
+    const yb=hitY-(s.t-eng.clock)*speed,h=Math.max(26,s.d*speed-6),x=s.k*(lw+4)+3,w=lw-6;
     if(yb-h>hitY||yb<-10)return;
-    const nt=NOTES[n.k];ctx.globalAlpha=n.played?.45:1;
-    ctx.fillStyle=nt.c;rr(x,yb-h,w,h,12);ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,.35)';rr(x+5,yb-h+4,w-10,6,3);ctx.fill();
-    ctx.fillStyle=n.k===2?'#0a2232':'#fff';ctx.font='700 '+Math.min(18,lw*.3)+'px Fredoka, sans-serif';
-    ctx.fillText(nt.n,x+w/2,yb-Math.min(h/2,18));ctx.globalAlpha=1;
+    const kk=keys[s.k];ctx.globalAlpha=s.played?.45:1;
+    ctx.fillStyle=kk.c;rr(x,yb-h,w,h,Math.min(12,w/3));ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.35)';rr(x+5,yb-h+4,Math.max(2,w-10),6,3);ctx.fill();
+    ctx.fillStyle=kk.dark?'#0a2232':'#fff';ctx.font='700 '+Math.min(18,lw*.34)+'px Fredoka, sans-serif';
+    ctx.fillText(kk.n,x+w/2,yb-Math.min(h/2,18));ctx.globalAlpha=1;
   });
   ctx.restore();
   ctx.fillStyle='rgba(255,230,166,.9)';ctx.fillRect(0,hitY,W,4);
@@ -384,7 +467,7 @@ function input(i){
   flash(i);
   if(keyWaiter){
     if(i===keyWaiter.k){const r=keyWaiter.res;keyWaiter=null;glow(-1);r();}
-    else wrong(NOTES[i].n);
+    else wrong(keys[i].spoken);
     return;
   }
   if(eng.mode!=='practice')return;
@@ -393,20 +476,37 @@ function input(i){
   if(i===nx.k){
     nx.hit=true;eng.clock=nx.t;eng.waiting=false;setLyric(eng.idx);eng.idx++;
     if(eng.idx>=eng.seq.length){glow(-1);const d=eng.done;eng.done=null;eng.mode='idle';setTimeout(()=>d&&d(),500);}
-  }else wrong(NOTES[i].n);
+  }else wrong(keys[i].spoken);
 }
 function wrong(what){
   const tg=target(); if(tg<0) return;
   misses++;
-  quickSay('Esa fue '+what+'. Busca la tecla '+NOTES[tg].col+', '+NOTES[tg].n+'.');
+  quickSay('Esa fue '+what+'. Busca la tecla '+keys[tg].col+', '+keys[tg].spoken+'.');
 }
 
-/* ================= lyrics ================= */
-function showPhrase(seq,start){eng.lyr={seq,start};lyricsEl.innerHTML=seq.slice(start,start+6).map(n=>'<span>'+n.syl+'</span>').join('');}
+/* ================= lyrics (one phrase at a time) ================= */
+function showPhrase(seq,p){
+  eng.lyr={seq,p};
+  lyricsEl.innerHTML=seq.map((s,i)=>s.p===p?'<span data-i="'+i+'">'+s.syl+'</span>':'').join('');
+}
 function setLyric(i){
-  const L=eng.lyr;if(!L)return;
-  if(i<L.start||i>=L.start+6)showPhrase(L.seq,Math.floor(i/6)*6);
-  [...lyricsEl.children].forEach((s,j)=>{const g=eng.lyr.start+j;s.className=g===i?'on':g<i?'done':'';});
+  const L=eng.lyr;if(!L||!L.seq[i])return;
+  if(L.seq[i].p!==L.p)showPhrase(L.seq,L.seq[i].p);
+  [...lyricsEl.children].forEach(s=>{const g=+s.dataset.i;s.className=g===i?'on':g<i?'done':'';});
+}
+
+/* ================= songs ================= */
+function setSong(id){
+  song=SONGS[id];
+  const count={};song.keys.forEach(m=>{const nm=KEYINFO[m].n;count[nm]=(count[nm]||0)+1;});
+  keys=song.keys.map((m,i)=>{
+    const ki=KEYINFO[m];let spoken=ki.n;
+    if(count[ki.n]>1) spoken+=song.keys.findIndex(x=>KEYINFO[x].n===ki.n)===i?' bajito':' alto';
+    return {m,n:ki.n,col:ki.col,c:ki.c,dark:!!ki.dark,f:midiF(m),pc:m%12,spoken,fing:song.fing?song.fing[m]:''};
+  });
+  buildKeyboard();
+  $('songTitle').textContent=song.title;document.title='Piano con Marina · '+song.title;
+  const pv=buildSeq([0],'v1',.75,.6);eng.seq=pv;eng.clock=0;showPhrase(pv,0);
 }
 
 /* ================= class timeline (identical for screen and piano) ================= */
@@ -420,88 +520,93 @@ function play(seq,t){return new Promise(res=>{eng.seq=seq;eng.clock=0;eng.idx=0;
 const praise=()=>PRAISE[Math.floor(Math.random()*PRAISE.length)];
 const SCENES=8;
 function setProg(i){prog.style.width=(i/SCENES*100)+'%';}
+const ALL=()=>song.phrases.map((_,i)=>i);
 
 async function lesson(){
-  const t=++token;resetEngine();misses=0;
+  const S=song,t=++token;resetEngine();misses=0;
   try{
     setProg(0);
     await say('¡Hola! Soy Marina, la sirena pianista.',t);
-    await say(mic.on?'Hoy tocamos en tu piano “Los pollitos dicen”. Yo te escucho.':'Hoy vamos a tocar “Los pollitos dicen”.',t);
+    await say(mic.on?'Hoy tocamos en tu piano “'+S.title+'”. Yo te escucho.':'Hoy vamos a tocar “'+S.title+'”.',t);
     setProg(1);
     await say('Mira las teclas blancas. Cada una tiene su color.',t);
     await say('En el piano hay grupitos de dos teclas negras. Do es la blanca justo a la izquierda de las dos negras.',t);
-    for(let i=0;i<6;i++){
-      glow(i);tone(NOTES[i].f);
-      await say('Esta es '+NOTES[i].n+', la '+NOTES[i].col+'. ¡Tócala!',t);
+    for(const line of S.keyIntro) await say(line,t);
+    for(let i=0;i<keys.length;i++){
+      glow(i);tone(keys[i].f);
+      await say('Esta es '+keys[i].spoken+', la '+keys[i].col+'. ¡Tócala!',t);
       await waitForKey(i,t);
       bubble.textContent=praise();await wait(450,t);
     }
-    setProg(2);keysEl.classList.add('show-fingers');
-    await say('Pon tu mano derecha así: el dedo gordo en Do, la roja.',t);
-    await say('Cada dedito en una tecla. El meñique queda en Sol.',t);
-    await say('Para La, la morada, estira el meñique un poquito.',t);
+    setProg(2);if(S.fing)keysEl.classList.add('show-fingers');
+    for(const line of S.hand) await say(line,t);
     keysEl.classList.remove('show-fingers');
-    for(let p=0;p<4;p++){
-      setProg(3+p*.75);
-      await say(PHRASE_TXT[p],t);
+    for(let p=0;p<S.phrases.length;p++){
+      setProg(3+p*3/S.phrases.length);
+      await say(S.phrases[p].txt,t);
       await say('Mira y escucha.',t);
-      const notes=MEL.slice(p*6,p*6+6),words=V1.slice(p*6,p*6+6);
-      let s=buildSeq(notes,words,.75,FALL);showPhrase(s,0);await demo(s,t);
+      let s=buildSeq([p],'v1',.75,FALL);showPhrase(s,p);await demo(s,t);
       await say('Ahora tú. Toca la tecla que brilla, yo te espero.',t);
-      s=buildSeq(notes,words,.75,FALL);showPhrase(s,0);await play(s,t);
+      s=buildSeq([p],'v1',.75,FALL);showPhrase(s,p);await play(s,t);
       await say(praise(),t);
     }
     setProg(6);
     await say('¡Ahora toda la canción! Primero la toco yo. Canta conmigo.',t);
-    let full=buildSeq(MEL,V1,.62,FALL);showPhrase(full,0);await demo(full,t);
+    let full=buildSeq(ALL(),'v1',.62,FALL);showPhrase(full,0);await demo(full,t);
     setProg(7);
     await say('Ahora tú, toda la canción. ¡Tú puedes!',t);
-    full=buildSeq(MEL,V1,.62,FALL);showPhrase(full,0);await play(full,t);
-    setProg(8);finish(V1,t);
+    full=buildSeq(ALL(),'v1',.62,FALL);showPhrase(full,0);await play(full,t);
+    setProg(8);finish('v1',t);
   }catch(e){if(e!=='cancel')console.error(e);}
 }
-let lastVerse=V1;
-async function song(verse){
-  const t=++token;resetEngine();misses=0;lastVerse=verse;setProg(7);
+let lastVerse='v1';
+async function playSong(verse){
+  const S=song,t=++token;resetEngine();misses=0;lastVerse=verse;setProg(7);
   try{
-    await say(verse===V2?'Ahora la parte de la gallina. Es la misma música.':'¡Otra vez toda la canción!',t);
-    const s=buildSeq(MEL,verse,.62,FALL);showPhrase(s,0);await play(s,t);
+    await say(verse==='v2'?S.v2Say:'¡Otra vez toda la canción!',t);
+    const s=buildSeq(ALL(),verse,.62,FALL);showPhrase(s,0);await play(s,t);
     setProg(8);finish(verse,t);
   }catch(e){if(e!=='cancel')console.error(e);}
 }
 function finish(verse,t){
-  lastVerse=verse;const s=misses<=4?3:misses<=10?2:1;
-  $('stars').innerHTML=[0,1,2].map(i=>'<span class="'+(i<s?'':'off')+'">★</span>').join('');
-  $('endTitle').textContent=s===3?'¡Lo lograste!':'¡Muy bien!';
-  $('endText').textContent=s===3?'Tocaste toda la canción. ¡Pío, pío, pío!':'Tocaste toda la canción. Otra vez y te sale perfecta.';
-  $('verse2Btn').hidden=verse===V2;$('endOv').hidden=false;
-  say(s===3?'¡Lo lograste! Eres una pianista.':'¡Muy bien! Tocaste toda la canción.',t).catch(()=>{});
+  const S=song;lastVerse=verse;const st=misses<=4?3:misses<=10?2:1;
+  $('stars').innerHTML=[0,1,2].map(i=>'<span class="'+(i<st?'':'off')+'">★</span>').join('');
+  $('endTitle').textContent=st===3?'¡Lo lograste!':'¡Muy bien!';
+  $('endText').textContent=st===3?S.winText:'Tocaste toda la canción. Otra vez y te sale perfecta.';
+  const v2=$('verse2Btn');v2.hidden=!S.v2Label||verse==='v2';if(S.v2Label)v2.textContent=S.v2Label;
+  $('endOv').hidden=false;
+  say(st===3?S.winSay:'¡Muy bien! Tocaste toda la canción.',t).catch(()=>{});
 }
 function resetEngine(){
   eng.mode='idle';eng.seq=[];eng.done=null;eng.idx=0;eng.waiting=false;keyWaiter=null;glow(-1);lyricsEl.innerHTML='';
   keysEl.classList.remove('show-fingers');try{speechSynthesis.cancel()}catch(e){}speaking=false;teacher.classList.remove('talking');
 }
 
-/* ================= start buttons ================= */
+/* ================= start: mode → song → class ================= */
+const startOv=$('startOv'),songOv=$('songOv'),endOv=$('endOv');
 function begin(){audio();unlockSpeech();} // must run inside the tap, before any await (iPhone)
-$('screenBtn').onclick=()=>{begin();stopMic();$('modeLabel').textContent='Clase con la pantalla';$('startOv').hidden=true;lesson();};
+function showSongs(){++token;resetEngine();setProg(0);startOv.hidden=true;endOv.hidden=true;songOv.hidden=false;bubble.textContent='¿Qué canción tocamos hoy?';}
+$('screenBtn').onclick=()=>{begin();stopMic();$('modeLabel').textContent='Clase con la pantalla';showSongs();};
 $('pianoBtn').onclick=async()=>{
   begin();
   const hint=$('micHint');hint.textContent='Pidiendo el micrófono…';hint.style.color='';
   try{
     if(!mic.on)await startMic();
-    $('modeLabel').textContent='Clase con tu piano';$('startOv').hidden=true;lesson();
+    $('modeLabel').textContent='Clase con tu piano';showSongs();
   }catch(e){
     hint.style.color='#b23a2e';
     hint.textContent=(e&&e.name==='NotAllowedError')?'El micrófono quedó bloqueado. Actívalo en los permisos del navegador para este sitio y vuelve a intentar.':'Aquí no se puede usar el micrófono. Abre la clase en tintin406.github.io/piano desde Safari o Chrome.';
   }
 };
-$('againBtn').onclick=()=>{begin();$('endOv').hidden=true;song(lastVerse===V2?V1:lastVerse);};
-$('verse2Btn').onclick=()=>{begin();$('endOv').hidden=true;song(V2);};
-$('rewatchBtn').onclick=()=>{begin();$('endOv').hidden=true;lesson();};
-$('restartBtn').onclick=()=>{++token;resetEngine();stopMic();setProg(0);$('endOv').hidden=true;$('startOv').hidden=false;$('micHint').textContent='Con tu piano: deja el teléfono cerca, sube el volumen y acepta el permiso del micrófono.';$('micHint').style.color='';bubble.textContent='¡Hola! Soy Marina. ¿Aprendemos una canción?';};
+songOv.querySelectorAll('[data-song]').forEach(b=>b.onclick=()=>{begin();setSong(b.dataset.song);songOv.hidden=true;lesson();});
+$('backBtn').onclick=()=>{songOv.hidden=true;startOv.hidden=false;$('micHint').style.color='';$('micHint').textContent='Con tu piano: deja el teléfono cerca, sube el volumen y acepta el permiso del micrófono.';};
+$('againBtn').onclick=()=>{begin();endOv.hidden=true;playSong('v1');};
+$('verse2Btn').onclick=()=>{begin();endOv.hidden=true;playSong('v2');};
+$('rewatchBtn').onclick=()=>{begin();endOv.hidden=true;lesson();};
+$('otherSongBtn').onclick=()=>{begin();showSongs();};
+$('restartBtn').onclick=()=>{++token;resetEngine();stopMic();setProg(0);endOv.hidden=true;songOv.hidden=true;startOv.hidden=false;$('micHint').textContent='Con tu piano: deja el teléfono cerca, sube el volumen y acepta el permiso del micrófono.';$('micHint').style.color='';bubble.textContent='¡Hola! Soy Marina. ¿Aprendemos una canción?';setSong('pollitos');};
 
-const preview=buildSeq(MEL.slice(0,6),V1.slice(0,6),.75,.6);eng.seq=preview;showPhrase(preview,0);
+setSong('pollitos');
 })();
 </script>
 
