@@ -67,7 +67,13 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
 .heard .lvl i{display:block;height:100%;width:0;background:var(--fa);transition:width .06s}
 .modechip{font:700 .75rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .keys{grid-template-columns:repeat(var(--n,6),1fr)}
-.bkey{width:calc((100% - (var(--n,6) - 1) * 4px) / var(--n,6) * .58)}
+.bkey{width:calc((100% - (var(--n,6) - 1) * 4px) / var(--n,6) * .58);height:62%;pointer-events:auto}
+.bclip{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.voicerow{display:flex;gap:8px;align-items:center;text-align:left}
+.voicerow label{font:800 .8rem var(--body);color:#33525f;flex:none}
+.voicerow select{flex:1;min-width:0;font:700 .85rem var(--body);color:var(--ink);background:#fff;border:1.5px solid #b9d3d8;border-radius:12px;padding:8px}
+.voicerow button{flex:none;font:800 .8rem var(--body);color:#fff;background:var(--ink);border:0;border-radius:12px;padding:9px 12px;cursor:pointer}
+.vtip{font-size:.78rem;margin:0;color:#4d6b76;text-align:left}
 .btn small{display:block;font:700 .8rem var(--body);opacity:.92;margin-top:2px}
 .linkbtn{font:800 .9rem var(--body);color:#33525f;background:none;border:0;padding:6px;cursor:pointer;text-decoration:underline}
 </style>
@@ -112,6 +118,8 @@ body{margin:0;background:var(--sea-deep);background-image:linear-gradient(180deg
       <button class="btn mic" id="pianoBtn">🎹 Clase con mi piano</button>
       <button class="btn alt" id="screenBtn">👆 Clase con la pantalla</button>
       <p class="hint" id="micHint">Con tu piano: deja el teléfono cerca, sube el volumen y acepta el permiso del micrófono.</p>
+      <div class="voicerow"><label for="voiceSel">Voz de Marina</label><select id="voiceSel"><option value="">Automática</option></select><button id="voiceTest" type="button">▶ Probar</button></div>
+      <p class="vtip" id="voiceTip" hidden></p>
     </div>
   </div>
   <div class="overlay" id="songOv" hidden>
@@ -177,7 +185,7 @@ const SONGS={
   cumple:{
     title:'Cumpleaños feliz',
     keys:[55,57,59,60,62,64,65,67],
-    keyIntro:['Esta canción usa más teclas. Empieza más abajo, a la izquierda del Do.'],
+    keyIntro:['Esta canción usa más teclas y empieza más abajo, a la izquierda del Do.','Busca el grupo de tres teclas negras que está a la izquierda del Do. Sol bajito es la blanca entre la primera y la segunda negra.'],
     hand:['Usa las dos manos. La mano izquierda toca Sol bajito, La y Si.','La mano derecha toca desde Do hasta Sol alto.','Hay dos Sol: el bajito es celeste y el alto es azul.'],
     phrases:[
       {m:[55,55,57,55,60,59],d:[.6,.4,1,1,1,2],v1:['Cum','ple','a','ños','fe','liz'],
@@ -195,7 +203,7 @@ const SONGS={
   arroz:{
     title:'Arroz con leche',
     keys:[55,57,59,60,62,64,65],
-    keyIntro:['Esta canción usa más teclas. Empieza más abajo, a la izquierda del Do.'],
+    keyIntro:['Esta canción usa más teclas y empieza más abajo, a la izquierda del Do.','Busca el grupo de tres teclas negras que está a la izquierda del Do. Sol bajito es la blanca entre la primera y la segunda negra.'],
     hand:['Usa las dos manos. La mano izquierda toca Sol, La y Si.','La mano derecha toca Do, Re, Mi y Fa.'],
     phrases:[
       {m:[55,60,60,64,60],d:[.5,1,.5,1,1.5],v1:['A','rroz','con','le','che'],v2:['que','se','pa','co','ser'],
@@ -237,9 +245,56 @@ function tone(f,len){
 let soundUntil=0; // while the phone itself is making piano sound, the mic ignores wrong notes
 
 /* ================= voice ================= */
-let voiceOn=true,voice=null,speaking=false;
-function pickVoice(){try{const vs=speechSynthesis.getVoices();voice=vs.find(v=>/^es[-_](CL|419|MX|US|AR|CO)/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null;}catch(e){}}
-try{pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}catch(e){}
+/* Uses the best Spanish voice on the device: neural/"Natural" voices (Edge, Windows), enhanced/premium voices (iPhone, Mac),
+   Google voices (Android, Chrome), Latin American accent first. Novelty and eSpeak voices go last. */
+let voiceOn=true,voice=null,speaking=false,esVoices=[];
+const LS_VOICE='marina-voice';
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k);}catch(e){}}
+function voiceScore(v){
+  const n=v.name||'',l=(v.lang||'').replace('_','-');let s=0;
+  if(/^es-CL/i.test(l))s+=30;else if(/^es-(419|MX|US|AR|CO|PE|UY|VE|EC|BO|PY|CR|PA|DO|GT|HN|NI|SV|PR|CU)/i.test(l))s+=22;else if(/^es-ES/i.test(l))s+=12;else s+=6;
+  if(/natural|neural|online/i.test(n))s+=60;
+  if(/premium/i.test(n))s+=55;else if(/mejorad|enhanced|siri/i.test(n))s+=45;
+  if(/google/i.test(n))s+=30;
+  if(/catalina|dalia|paulina|m[oó]nica|elena|sabina|helena|elvira|marisol|valentina|francisca|isabela|camila/i.test(n))s+=6;
+  if(/compact/i.test(n))s-=25;
+  if(/espeak|eddy|flo|grandma|grandpa|abuel|rocko|sandy|shelley|reed|jacques|bad news|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|albert|fred|junior|kathy|ralph/i.test(n))s-=80;
+  return s;
+}
+function voiceLabel(v){
+  const reg={CL:'Chile',MX:'México',US:'EE.UU.',ES:'España',AR:'Argentina',CO:'Colombia','419':'Latinoamérica'};
+  const r=((v.lang||'').replace('_','-').split('-')[1]||'').toUpperCase();
+  return v.name.replace(/^Microsoft\s+/,'').replace(/\s+-\s+Spanish.*$/i,'').replace(/\s*\(Natural\)/i,' (natural)')+(reg[r]?' · '+reg[r]:'');
+}
+function pickVoice(){
+  try{
+    esVoices=speechSynthesis.getVoices().filter(v=>/^es/i.test(v.lang)).sort((a,b)=>voiceScore(b)-voiceScore(a));
+    const saved=lsGet(LS_VOICE);
+    voice=(saved&&esVoices.find(v=>v.voiceURI===saved))||esVoices[0]||null;
+    const sel=$('voiceSel');
+    if(sel){
+      sel.innerHTML='<option value="">Automática'+(esVoices[0]?' ('+voiceLabel(esVoices[0])+')':'')+'</option>'+
+        esVoices.map(v=>'<option value="'+v.voiceURI.replace(/"/g,'&quot;')+'">'+voiceLabel(v)+'</option>').join('');
+      sel.value=saved&&esVoices.some(v=>v.voiceURI===saved)?saved:'';
+    }
+    const tip=$('voiceTip'),best=esVoices[0]?voiceScore(esVoices[0]):0;
+    if(tip){
+      const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+      const android=/Android/.test(navigator.userAgent);
+      tip.hidden=best>=50;
+      tip.textContent=ios?'Para una voz más natural: Ajustes › Accesibilidad › Contenido leído › Voces › Español, y descarga Paulina o Mónica en versión Mejorada o Premium. Después vuelve a abrir esta página.'
+        :android?'Para una voz más natural: en Ajustes busca “Salida de texto a voz”, elige el motor de Google y descarga la voz en español.'
+        :'Para una voz más natural abre esta página en Microsoft Edge (tiene voces naturales en español) o en Chrome.';
+    }
+  }catch(e){}
+}
+function voiceById(id){return (id&&esVoices.find(v=>v.voiceURI===id))||esVoices[0]||null;}
+try{pickVoice();speechSynthesis.onvoiceschanged=pickVoice;setTimeout(pickVoice,800);}catch(e){}
+$('voiceSel').onchange=e=>{lsSet(LS_VOICE,e.target.value);voice=voiceById(e.target.value);};
+$('voiceTest').onclick=()=>{audio();voiceOn=true;$('voiceBtn').setAttribute('aria-pressed',true);speak('¡Hola! Soy Marina. ¿Aprendemos una canción?');};
+/* spoken text: no quotes, "#" read as sostenido */
+function spoken(text){return text.replace(/[“”"]/g,'').replace(/([A-Z][a-z]{0,2})#/g,'$1 sostenido');}
 function unlockSpeech(){try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;u.lang='es-ES';speechSynthesis.speak(u);}catch(e){}}
 $('voiceBtn').onclick=e=>{voiceOn=!voiceOn;e.currentTarget.setAttribute('aria-pressed',voiceOn);if(!voiceOn)try{speechSynthesis.cancel()}catch(_){}};
 function speak(text){
@@ -248,7 +303,9 @@ function speak(text){
   return new Promise(res=>{
     let d=false; const fin=()=>{if(d)return;d=true;speaking=false;teacher.classList.remove('talking');res();};
     if(voiceOn&&'speechSynthesis' in window){
-      try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.replace(/[“”]/g,''));u.lang=voice?voice.lang:'es-ES';if(voice)u.voice=voice;u.rate=.95;u.pitch=1.25;u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);setTimeout(fin,est+3500);}catch(e){setTimeout(fin,est);}
+      try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(spoken(text));u.lang=voice?voice.lang:'es-419';if(voice)u.voice=voice;
+        const nat=voice&&voiceScore(voice)>=60;u.rate=nat?1:.95;u.pitch=nat?1.05:1.1;
+        u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);setTimeout(fin,est+3500);}catch(e){setTimeout(fin,est);}
     }else setTimeout(fin,est);
   });
 }
@@ -268,12 +325,17 @@ function buildKeyboard(){
     b.innerHTML=(kk.fing?'<span class="fing">'+kk.fing+'</span>':'')+'<span class="lbl">'+kk.n+'</span>';b.setAttribute('aria-label','Tecla '+kk.spoken);
     b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(kk.f);input(i);});keysEl.appendChild(b);return b;
   });
-  for(let i=1;i<n;i++){
-    if(keys[i].m-keys[i-1].m!==2) continue; // black key only between whole steps
-    const f=midiF(keys[i-1].m+1),b=document.createElement('button');b.className='bkey';b.tabIndex=-1;b.setAttribute('aria-hidden','true');
-    b.style.left='calc('+i+' * (100% + 4px) / '+n+' - 2px)';
+  /* Black keys like a real piano: groups of 2 (Do#, Re#) and 3 (Fa#, Sol#, La#), each slightly off-centre.
+     Black keys just outside the first/last white key are drawn half-visible so the groups never look wrong. */
+  const clip=document.createElement('div');clip.className='bclip';keysEl.appendChild(clip);
+  const OFF={1:-.1,3:.1,6:-.13,8:0,10:.13};
+  for(let m=keys[0].m-1;m<=keys[n-1].m+1;m++){
+    if(OFF[m%12]===undefined) continue;
+    const i=keys.findIndex(k=>k.m>m),pos=i<0?n:i; // boundary index: black key sits left of white key `pos`
+    const f=midiF(m),b=document.createElement('button');b.className='bkey';b.tabIndex=-1;b.setAttribute('aria-hidden','true');
+    b.style.left='calc('+pos+' * (100% + 4px) / '+n+' - 2px + '+OFF[m%12]+' * (100% - '+(n-1)*4+'px) / '+n+')';
     b.addEventListener('pointerdown',e=>{e.preventDefault();tapAt=performance.now();tone(f);b.classList.add('down');setTimeout(()=>b.classList.remove('down'),160);wrong('una tecla negra');});
-    keysEl.appendChild(b);
+    clip.appendChild(b);
   }
 }
 const KMAP='asdfghjk';
